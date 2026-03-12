@@ -1,6 +1,6 @@
-
 require("dotenv").config();
 const express = require("express");
+const path    = require("path");
 const { getKalshiMarkets, placeBet } = require("./kalshi");
 const { getSharpOdds } = require("./odds");
 const { eloToWinProb, getElo } = require("./elo");
@@ -8,9 +8,9 @@ const { eloToWinProb, getElo } = require("./elo");
 const app = express();
 app.use(express.json());
 
-const path = require("path");
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "dashboard.html")));
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+// ── SERVE DASHBOARD ───────────────────────────────────────────────────────────
+app.get("/",          (req, res) => res.sendFile(path.join(__dirname, "dashboard.html")));
+app.get("/api/health",(req, res) => res.json({ ok: true }));
 
 // ── CONFIG FROM ENV VARS ──────────────────────────────────────────────────────
 const CONFIG = {
@@ -170,7 +170,20 @@ function pushLog(msg) {
   console.log(`[${t}] ${msg}`);
 }
 
-// ── EXPRESS API ENDPOINTS (dashboard connects here) ───────────────────────────
+// ── EXPRESS API ENDPOINTS (dashboard connects here) ──────────────────────────
+app.post("/api/scan", async (req, res) => {
+  pushLog("⚡ Manual scan triggered by operator");
+  const wasStopped = !state.running;
+  if (wasStopped) state.running = true;
+  try {
+    await scan();
+    if (wasStopped) state.running = false;
+    res.json({ ok: true });
+  } catch (err) {
+    if (wasStopped) state.running = false;
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});─
 app.get("/api/state",  (req, res) => res.json(state));
 app.get("/api/config", (req, res) => res.json(CONFIG));
 app.post("/api/start", (req, res) => {
