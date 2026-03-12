@@ -1,3 +1,5 @@
+js
+
 // bot/kalshi.js — Kalshi REST API v2 client
 // Auth: RSA-PSS SHA256 request signing
 // Signing message: timestampMs + METHOD + FULL_PATH (no query string)
