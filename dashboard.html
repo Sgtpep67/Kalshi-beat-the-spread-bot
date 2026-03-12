@@ -265,8 +265,9 @@ function App() {
         try {
           const bal = await api("/api/balance");
           if (bal.ok && bal.balance) {
-            const cents = bal.balance.balance ?? bal.balance.available_balance ?? null;
-            if (cents !== null) setKalshiBalance(cents / 100);
+            // getBalance now returns dollars directly (already divided by 100 in kalshi.js)
+            const dollars = bal.balance.balance ?? null;
+            if (dollars !== null) setKalshiBalance(dollars);
           }
         } catch {}
         if (data.log && data.log.length > 0) setLiveLog(data.log);
