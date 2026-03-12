@@ -197,7 +197,7 @@ function App() {
   const [connected,  setConnected]  = useState(false);
 
   // Risk controls (local config — sent to server via env vars in production)
-  const [dailyLoss,      setDailyLoss]      = useState(400);
+  const [dailyLoss,      setDailyLoss]      = useState(50);
   const [maxBet,         setMaxBet]         = useState(100);
   const [maxConsec,      setMaxConsec]      = useState(4);
   const [kellyFrac,      setKellyFrac]      = useState(25);
@@ -261,15 +261,10 @@ function App() {
         setOpenBets(data.openBets ?? []);
         setSettledBets(data.settledBets ?? []);
         if (data.inCooldown && data.cooldownAt) setCooldownAt(new Date(data.cooldownAt));
-        // Fetch real Kalshi balance every poll cycle
-        try {
-          const bal = await api("/api/balance");
-          if (bal.ok && bal.balance) {
-            // getBalance now returns dollars directly (already divided by 100 in kalshi.js)
-            const dollars = bal.balance.balance ?? null;
-            if (dollars !== null) setKalshiBalance(dollars);
-          }
-        } catch {}
+        // Balance comes directly from state now — refreshed after every bet/settlement
+        if (data.kalshiBalance !== null && data.kalshiBalance !== undefined) {
+          setKalshiBalance(data.kalshiBalance);
+        }
         if (data.log && data.log.length > 0) setLiveLog(data.log);
         setConnected(true);
       } catch {
@@ -386,7 +381,7 @@ function App() {
         {tab==="overview" && (
           <div style={{animation:"fadein .3s ease"}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
-              <KPI label="BANKROLL"  value={kalshiBalance !== null ? `$${kalshiBalance.toFixed(2)}` : `$${bankroll.toFixed(0)}`} sub={kalshiBalance !== null ? "Live Kalshi balance" : `Est. from $${BANKROLL_INIT}`}/>
+              <KPI label="BANKROLL"  value={kalshiBalance !== null ? `$${kalshiBalance.toFixed(2)}` : `$${bankroll.toFixed(0)}`} sub={kalshiBalance !== null ? "↑ Live from Kalshi" : "Paper / no key set"}/>
               <KPI label="NET P&L"   value={`${TOT_PNL>=0?"+":""}$${TOT_PNL.toFixed(0)}`} color={TOT_PNL>=0?"#00e5a0":"#ff4d6d"} sub={`ROI ${roi}%`}/>
               <KPI label="TODAY P&L" value={`+$${BETS.slice(0,5).reduce((s,b)=>s+b.pnl,0).toFixed(0)}`} color="#00e5a0" sub="Last 5 bets"/>
               <KPI label="WIN RATE"  value={`${winRate}%`} color="#f5a623" sub={`${WINS}W · ${BETS.length-WINS}L`}/>
