@@ -24,7 +24,8 @@ const CONFIG = {
   MAX_HOURS_TO_GAME:  parseFloat(process.env.MAX_HOURS_TO_GAME || "4"),
   KELLY_FRACTION:     parseFloat(process.env.KELLY_FRACTION || "0.25"),
   ELO_WEIGHT:         parseFloat(process.env.ELO_WEIGHT || "0.40"),
-  KALSHI_API_KEY:     process.env.KALSHI_API_KEY,
+  KALSHI_API_KEY:     process.env.KALSHI_API_KEY,      // short Key ID string
+  KALSHI_PRIVATE_KEY: (process.env.KALSHI_API_SECRET || "").replace(/\\n/g, "\n"), // full RSA PEM
   ODDS_API_KEY:       process.env.ODDS_API_KEY,
 };
 
@@ -86,7 +87,7 @@ async function scan() {
   }
 
   try {
-    const markets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY);
+    const markets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
     const odds    = await getSharpOdds(CONFIG.ODDS_API_KEY);
 
     for (const market of markets) {
@@ -126,7 +127,7 @@ async function scan() {
       pushLog(`SIGNAL ${homeTeam} +${(edge*100).toFixed(1)}% edge · fair ${(fairHome*100).toFixed(1)}¢ · Kalshi ${(kalshiHomeProb*100).toFixed(1)}¢`);
 
       if (!CONFIG.PAPER_MODE) {
-        await placeBet({ gameId, team: homeTeam, stake, apiKey: CONFIG.KALSHI_API_KEY });
+        await placeBet({ gameId, team: homeTeam, stake, apiKeyId: CONFIG.KALSHI_API_KEY, privateKey: CONFIG.KALSHI_PRIVATE_KEY });
         pushLog(`LIVE BET $${stake.toFixed(2)} on ${homeTeam}`);
       } else {
         pushLog(`PAPER BET $${stake.toFixed(2)} on ${homeTeam}`);
