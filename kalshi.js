@@ -40,11 +40,12 @@ function signMessage(message, privateKeyPem) {
   }, "base64");
 }
 
-function buildAuthHeaders(method, path, apiKeyId, privateKey) {
+function buildAuthHeaders(method, shortPath, apiKeyId, privateKey) {
   const timestampMs = Date.now().toString();
-  // Strip query params before signing — Kalshi signs path only, not query string
-  const pathOnly = path.split("?")[0];
-  const message  = buildMessage(timestampMs, method, pathOnly);
+  // Kalshi signs: timestamp + METHOD + path (no query params, no base URL prefix)
+  // e.g. "1710000000000GET/portfolio/balance"
+  const pathForSigning = shortPath.split("?")[0];
+  const message   = buildMessage(timestampMs, method, pathForSigning);
   const signature = signMessage(message, privateKey);
   return {
     "KALSHI-ACCESS-KEY":       apiKeyId,
@@ -92,13 +93,10 @@ async function getKalshiMarkets(apiKeyId, privateKey, opts = {}) {
 
   do {
     const params   = { status: "open", limit: 200, ...(cursor ? { cursor } : {}) };
-    const qs       = new URLSearchParams(params).toString();
-    const fullPath = `/trade-api/v2/markets?${qs}`;
-
     let response;
     try {
       response = await axios.get(`${BASE_URL}/markets`, {
-        headers: buildAuthHeaders("GET", fullPath, apiKeyId, privateKey),
+        headers: buildAuthHeaders("GET", "/markets", apiKeyId, privateKey),
         params,
         timeout: 12000,
       });
@@ -135,7 +133,7 @@ async function getKalshiMarkets(apiKeyId, privateKey, opts = {}) {
 
 async function placeBet({ gameId, team, stake, apiKeyId, privateKey }) {
   const count = Math.max(1, Math.floor(stake));
-  const path  = "/trade-api/v2/portfolio/orders";
+  const path  = "/portfolio/orders";
   const orderPayload = {
     ticker:          gameId,
     client_order_id: `kb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -159,7 +157,7 @@ async function placeBet({ gameId, team, stake, apiKeyId, privateKey }) {
 }
 
 async function getBalance(apiKeyId, privateKey) {
-  const path = "/trade-api/v2/portfolio/balance";
+  const path = "/portfolio/balance";
   try {
     const response = await axios.get(`${BASE_URL}/portfolio/balance`, {
       headers: buildAuthHeaders("GET", path, apiKeyId, privateKey),
