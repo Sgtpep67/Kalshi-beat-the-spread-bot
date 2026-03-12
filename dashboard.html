@@ -166,6 +166,39 @@ const RangeRow = ({ label, hint, value, min, max, step=1, onChange, fmt, color="
   </div>
 );
 
+
+// ── SCAN BUTTON ────────────────────────────────────────────────────────────────
+function ScanButton() {
+  const [scanning, setScanning] = React.useState(false);
+  const [flash,    setFlash]    = React.useState(null); // "ok" | "err"
+
+  const runScan = async () => {
+    if (scanning) return;
+    setScanning(true);
+    setFlash(null);
+    try {
+      const res = await api("/api/scan", "POST");
+      setFlash(res.ok ? "ok" : "err");
+    } catch {
+      setFlash("err");
+    } finally {
+      setScanning(false);
+      setTimeout(() => setFlash(null), 2500);
+    }
+  };
+
+  const bg    = flash==="ok" ? "rgba(0,229,160,.2)"  : flash==="err" ? "rgba(255,77,109,.2)"  : "rgba(77,159,255,.1)";
+  const bdr   = flash==="ok" ? "#00e5a0"              : flash==="err" ? "#ff4d6d"               : "#4d9fff44";
+  const color = flash==="ok" ? "#00e5a0"              : flash==="err" ? "#ff4d6d"               : "#4d9fff";
+  const label = scanning ? "SCANNING…" : flash==="ok" ? "✓ DONE" : flash==="err" ? "✗ ERROR" : "⚡ RUN SCAN";
+
+  return (
+    <button onClick={runScan} disabled={scanning} style={{background:bg,border:`1px solid ${bdr}`,color,borderRadius:6,padding:"5px 14px",cursor:scanning?"wait":"pointer",fontSize:9,fontFamily:"inherit",fontWeight:700,letterSpacing:.5,transition:"all .2s",opacity:scanning?.7:1}}>
+      {label}
+    </button>
+  );
+}
+
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
 function App() {
   const [tab, setTab]       = useState("overview");
@@ -388,6 +421,7 @@ function App() {
                     <div>Max open <span style={{color:"#fff"}}>{maxConcurrent} bets</span></div>
                     <div>Max hrs to game <span style={{color:"#f5a623"}}>{maxHoursToGame}h</span></div>
                   </div>
+                  <div style={{marginTop:12}}><ScanButton/></div>
                 </Card>
                 <Card>
                   <div style={{fontSize:8,color:"#8888aa",letterSpacing:1,marginBottom:8}}>DAILY LOSS METER</div>
@@ -673,9 +707,12 @@ function App() {
                 <span style={{width:6,height:6,borderRadius:"50%",background:connected?"#00e5a0":"#ff4d6d",display:"inline-block",animation:connected?"blink 2s infinite":"none"}}/>
                 {connected?"Live — polling every 5s":"Disconnected from bot"}
               </span>
-              <div style={{marginLeft:"auto",fontSize:9,color:"#8888aa"}}>
-                <span style={{color:inCooldown?"#f5a623":botOn?"#00e5a0":"#555570"}}>{inCooldown?"⏸ COOLDOWN":botOn?"● RUNNING":"○ IDLE"}</span>
-                {" "}&nbsp;·&nbsp; {displayLog.length} lines
+              <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:9,color:"#8888aa"}}>
+                  <span style={{color:inCooldown?"#f5a623":botOn?"#00e5a0":"#555570"}}>{inCooldown?"⏸ COOLDOWN":botOn?"● RUNNING":"○ IDLE"}</span>
+                  {" "}&nbsp;·&nbsp; {displayLog.length} lines
+                </span>
+                <ScanButton/>
               </div>
             </div>
             <div ref={logRef} style={{background:"#040407",border:"1px solid #0f0f18",borderRadius:10,padding:"14px 16px",height:520,overflowY:"auto"}}>
