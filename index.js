@@ -225,7 +225,7 @@ app.post("/api/scan", async (req, res) => {
     if (wasStopped) state.running = false;
     res.status(500).json({ ok: false, error: err.message });
   }
-});─
+});
 app.get("/api/state", (req, res) => {
   // Exclude betLockSet (not JSON-serializable)
   const { betLockSet, ...rest } = state;
