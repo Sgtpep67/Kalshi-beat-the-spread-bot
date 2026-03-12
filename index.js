@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const path    = require("path");
-const { getKalshiMarkets, placeBet } = require("./kalshi");
+const { getKalshiMarkets, placeBet, getBalance } = require("./kalshi");
 const { getSharpOdds } = require("./odds");
 const { eloToWinProb, getElo } = require("./elo");
 
