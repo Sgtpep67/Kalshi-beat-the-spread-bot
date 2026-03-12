@@ -184,7 +184,7 @@ app.post("/api/scan", async (req, res) => {
     if (wasStopped) state.running = false;
     res.status(500).json({ ok: false, error: err.message });
   }
-});─
+});
 app.get("/api/state",  (req, res) => res.json(state));
 app.get("/api/config", (req, res) => res.json(CONFIG));
 app.post("/api/start", (req, res) => {
