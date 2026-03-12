@@ -93,7 +93,16 @@ async function scan() {
 
   try {
     const markets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
-    const odds    = await getSharpOdds(CONFIG.ODDS_API_KEY);
+    pushLog(`[kalshi] ✓ ${markets.length} sports markets fetched`);
+
+    const odds = await getSharpOdds(CONFIG.ODDS_API_KEY);
+    const oddsCount = Object.keys(odds).length;
+    pushLog(`[odds] ✓ ${oddsCount} games with sharp lines fetched`);
+
+    if (markets.length === 0) {
+      pushLog("[scan] No Kalshi sports markets found — check sport filters or market availability");
+      return;
+    }
 
     for (const market of markets) {
       const { gameId, homeTeam, awayTeam, homeProb: kalshiHomeProb,
