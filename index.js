@@ -16,8 +16,8 @@ app.get("/api/health",(req, res) => res.json({ ok: true }));
 const CONFIG = {
   PAPER_MODE:         process.env.PAPER_MODE !== "false",       // default: paper
   MIN_EDGE_PCT:       parseFloat(process.env.MIN_EDGE_PCT || "5"),
-  MAX_BET_USD:        parseFloat(process.env.MAX_BET_USD || "100"),
-  DAILY_LOSS_LIMIT:   parseFloat(process.env.DAILY_LOSS_LIMIT || "400"),
+  MAX_BET_USD:        parseFloat(process.env.MAX_BET_USD || "5"),
+  DAILY_LOSS_LIMIT:   parseFloat(process.env.DAILY_LOSS_LIMIT || "50"),
   MAX_CONSEC_LOSSES:  parseInt(process.env.MAX_CONSEC_LOSSES || "4"),
   MAX_CONCURRENT:     parseInt(process.env.MAX_CONCURRENT || "3"),
   MIN_LIQUIDITY:      parseFloat(process.env.MIN_LIQUIDITY || "500"),
@@ -31,15 +31,18 @@ const CONFIG = {
 
 // ── BOT STATE ─────────────────────────────────────────────────────────────────
 let state = {
-  running:       false,
-  inCooldown:    false,
-  cooldownAt:    null,
-  consecutiveLosses: 0,
-  todayLoss:     0,
-  openBets:      [],        // [{ gameId, team, stake, fairProb, marketProb }]
-  settledBets:   [],        // [{ gameId, team, stake, edge, status, pnl, settledAt }]
-  betLockSet:    new Set(), // "gameId-YYYY-MM-DD" — one bet per game per day
-  log:           [],
+  running:            false,
+  inCooldown:         false,
+  cooldownAt:         null,
+  consecutiveLosses:  0,
+  todayLoss:          0,
+  openBets:           [],
+  settledBets:        [],
+  betLockSet:         new Set(),
+  log:                [],
+  kalshiBalance:      null,   // live account balance in dollars
+  portfolioValue:     null,   // balance + open position value
+  balanceUpdatedAt:   null,
 };
 
 // ── DUPLICATE BET GUARD ───────────────────────────────────────────────────────
@@ -77,6 +80,7 @@ function kellySize(fairProb, marketProb) {
 // ── MAIN SCAN LOOP ────────────────────────────────────────────────────────────
 async function scan() {
   if (!state.running || state.inCooldown) return;
+  await refreshBalance();
   if (state.todayLoss >= CONFIG.DAILY_LOSS_LIMIT) {
     state.running = false;
     pushLog("⛔ Daily loss limit reached — bot halted");
@@ -135,6 +139,7 @@ async function scan() {
       }
 
       lockGame(gameId);
+      await refreshBalance();
       state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || 'unknown', stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb });
     }
   } catch (err) {
@@ -151,6 +156,9 @@ function handleResult(gameId, won) {
   const pnl = won
     ? parseFloat((bet.stake * (1 / bet.marketProb - 1)).toFixed(2))
     : -bet.stake;
+
+  // Refresh balance from Kalshi after settlement
+  refreshBalance().catch(() => {});
 
   state.settledBets.push({
     id:         state.settledBets.length + 1,
@@ -189,6 +197,21 @@ function pushLog(msg) {
   console.log(`[${t}] ${msg}`);
 }
 
+async function refreshBalance() {
+  if (!CONFIG.KALSHI_API_KEY || !CONFIG.KALSHI_PRIVATE_KEY) return;
+  try {
+    const bal = await getBalance(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+    if (bal) {
+      state.kalshiBalance    = bal.balance;
+      state.portfolioValue   = bal.portfolio_value;
+      state.balanceUpdatedAt = new Date().toISOString();
+      pushLog(`[balance] $${bal.balance.toFixed(2)} available · $${bal.portfolio_value.toFixed(2)} portfolio`);
+    }
+  } catch (err) {
+    pushLog(`[balance] fetch failed: ${err.message}`);
+  }
+}
+
 // ── EXPRESS API ENDPOINTS (dashboard connects here) ──────────────────────────
 app.post("/api/scan", async (req, res) => {
   pushLog("⚡ Manual scan triggered by operator");
@@ -202,13 +225,18 @@ app.post("/api/scan", async (req, res) => {
     if (wasStopped) state.running = false;
     res.status(500).json({ ok: false, error: err.message });
   }
+});─
+app.get("/api/state", (req, res) => {
+  // Exclude betLockSet (not JSON-serializable)
+  const { betLockSet, ...rest } = state;
+  res.json(rest);
 });
-app.get("/api/state",  (req, res) => res.json(state));
 app.get("/api/config", (req, res) => res.json(CONFIG));
-app.post("/api/start", (req, res) => {
+app.post("/api/start", async (req, res) => {
   if (state.inCooldown) return res.status(400).json({ error: "In cooldown — clear first" });
   state.running = true;
   pushLog(`Bot STARTED · ${CONFIG.PAPER_MODE ? "PAPER" : "⚠ LIVE"}`);
+  await refreshBalance();
   res.json({ ok: true });
 });
 app.post("/api/stop", (req, res) => {
@@ -227,8 +255,10 @@ app.post("/api/cooldown/clear", (req, res) => {
 app.get("/api/balance", async (req, res) => {
   try {
     const balance = await getBalance(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+    pushLog(`[balance] raw response: ${JSON.stringify(balance)}`);
     res.json({ ok: true, balance });
   } catch (err) {
+    pushLog(`[balance] ERROR: ${err.message}`);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -243,4 +273,8 @@ app.post("/api/result", (req, res) => {
 setInterval(scan, 60_000); // scan every 60 seconds
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`KalshiBot running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`KalshiBot running on port ${PORT}`);
+  // Fetch initial balance on startup
+  refreshBalance().catch(() => {});
+});
