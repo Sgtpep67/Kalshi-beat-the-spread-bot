@@ -224,6 +224,15 @@ app.post("/api/cooldown/clear", (req, res) => {
   pushLog("▶ COOLDOWN CLEARED — restarted by operator");
   res.json({ ok: true });
 });
+app.get("/api/balance", async (req, res) => {
+  try {
+    const balance = await getBalance(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+    res.json({ ok: true, balance });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post("/api/result", (req, res) => {
   const { gameId, won } = req.body;
   handleResult(gameId, won);
