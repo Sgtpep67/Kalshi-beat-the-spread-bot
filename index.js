@@ -261,6 +261,50 @@ app.post("/api/cooldown/clear", (req, res) => {
   pushLog("▶ COOLDOWN CLEARED — restarted by operator");
   res.json({ ok: true });
 });
+app.get("/api/debug/markets", async (req, res) => {
+  try {
+    const axios  = require("axios");
+    const crypto = require("crypto");
+    const BASE_URL = "https://trading-api.kalshi.com/trade-api/v2";
+
+    const ts  = Date.now().toString();
+    const msg = `${ts}GET/markets`;
+    const sig = crypto.createSign("RSA-SHA256");
+    sig.update(msg);
+    const signature = sig.sign({
+      key: CONFIG.KALSHI_PRIVATE_KEY,
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+    }, "base64");
+
+    const resp = await axios.get(`${BASE_URL}/markets`, {
+      headers: {
+        "KALSHI-ACCESS-KEY": CONFIG.KALSHI_API_KEY,
+        "KALSHI-ACCESS-TIMESTAMP": ts,
+        "KALSHI-ACCESS-SIGNATURE": signature,
+        "Accept": "application/json",
+      },
+      params: { status: "open", limit: 20 },
+      timeout: 10000,
+    });
+
+    const markets = resp.data.markets ?? [];
+    // Return first 20 raw tickers and titles so we can see exact format
+    res.json({
+      total: markets.length,
+      sample: markets.slice(0, 20).map(m => ({
+        ticker: m.ticker,
+        title:  m.title,
+        event_ticker: m.event_ticker,
+        yes_ask_dollars: m.yes_ask_dollars,
+        status: m.status,
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, status: err.response?.status });
+  }
+});
+
 app.get("/api/balance", async (req, res) => {
   try {
     const balance = await getBalance(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
