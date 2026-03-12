@@ -37,6 +37,7 @@ let state = {
   consecutiveLosses: 0,
   todayLoss:     0,
   openBets:      [],        // [{ gameId, team, stake, fairProb, marketProb }]
+  settledBets:   [],        // [{ gameId, team, stake, edge, status, pnl, settledAt }]
   betLockSet:    new Set(), // "gameId-YYYY-MM-DD" — one bet per game per day
   log:           [],
 };
@@ -134,7 +135,7 @@ async function scan() {
       }
 
       lockGame(gameId);
-      state.openBets.push({ gameId, team: homeTeam, stake, fairProb: fairHome, marketProb: kalshiHomeProb });
+      state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || 'unknown', stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb });
     }
   } catch (err) {
     pushLog(`ERROR in scan: ${err.message}`, "error");
@@ -147,9 +148,26 @@ function handleResult(gameId, won) {
   if (!bet) return;
   state.openBets = state.openBets.filter(b => b.gameId !== gameId);
 
+  const pnl = won
+    ? parseFloat((bet.stake * (1 / bet.marketProb - 1)).toFixed(2))
+    : -bet.stake;
+
+  state.settledBets.push({
+    id:         state.settledBets.length + 1,
+    gameId:     gameId,
+    team:       bet.team,
+    opp:        bet.awayTeam || "",
+    sport:      bet.sport || "unknown",
+    stake:      bet.stake,
+    edge:       bet.edge || 0,
+    status:     won ? "WON" : "LOST",
+    pnl,
+    settledAt:  new Date().toISOString(),
+  });
+
   if (won) {
     state.consecutiveLosses = 0;
-    pushLog(`WIN ${bet.team} · +$${(bet.stake * (1/bet.marketProb - 1)).toFixed(2)}`);
+    pushLog(`WIN ${bet.team} · +$${pnl.toFixed(2)}`);
   } else {
     state.todayLoss += bet.stake;
     state.consecutiveLosses++;
@@ -184,7 +202,7 @@ app.post("/api/scan", async (req, res) => {
     if (wasStopped) state.running = false;
     res.status(500).json({ ok: false, error: err.message });
   }
-});
+});─
 app.get("/api/state",  (req, res) => res.json(state));
 app.get("/api/config", (req, res) => res.json(CONFIG));
 app.post("/api/start", (req, res) => {
