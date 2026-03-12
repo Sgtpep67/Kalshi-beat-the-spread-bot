@@ -132,7 +132,7 @@ async function scan() {
       pushLog(`SIGNAL ${homeTeam} +${(edge*100).toFixed(1)}% edge · fair ${(fairHome*100).toFixed(1)}¢ · Kalshi ${(kalshiHomeProb*100).toFixed(1)}¢`);
 
       if (!CONFIG.PAPER_MODE) {
-        await placeBet({ gameId, team: homeTeam, stake, apiKeyId: CONFIG.KALSHI_API_KEY, privateKey: CONFIG.KALSHI_PRIVATE_KEY });
+        await placeBet({ gameId, team: homeTeam, stake, marketProb: kalshiHomeProb, apiKeyId: CONFIG.KALSHI_API_KEY, privateKey: CONFIG.KALSHI_PRIVATE_KEY });
         pushLog(`LIVE BET $${stake.toFixed(2)} on ${homeTeam}`);
       } else {
         pushLog(`PAPER BET $${stake.toFixed(2)} on ${homeTeam}`);
