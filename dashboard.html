@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KalshiBot</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bricolage+Grotesque:wght@700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#07070b;font-family:'DM Mono','Courier New',monospace;color:#fff}
+    input[type=range]{-webkit-appearance:none;appearance:none;height:3px;border-radius:2px;background:#191924;outline:none;display:block}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;cursor:pointer;border:2px solid #07070b}
+    ::-webkit-scrollbar{width:4px;height:4px}
+    ::-webkit-scrollbar-thumb{background:#202028;border-radius:2px}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+    @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .tr:hover{background:#111118!important;cursor:pointer}
+    input::placeholder{color:#22222e}
+    button:active{opacity:.8}
+    input[type=number]::-webkit-inner-spin-button{opacity:1}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── API ────────────────────────────────────────────────────────────────────────
+async function api(path, method = "GET", body) {
+  const res = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  return res.json();
+}
+
+// ── SECURE VAULT ───────────────────────────────────────────────────────────────
+const Vault = {
+  save: (v) => { try { sessionStorage.setItem("kb_kalshi", btoa(unescape(encodeURIComponent(v)))); } catch {} },
+  load: ()   => { try { const s = sessionStorage.getItem("kb_kalshi"); return s ? decodeURIComponent(escape(atob(s))) : ""; } catch { return ""; } },
+  wipe: ()   => { try { sessionStorage.removeItem("kb_kalshi"); } catch {} },
+};
+
+// ── SEED DATA (shown before first API poll) ────────────────────────────────────
+const SEED_BETS = [
+  { id:1,  team:"Boston Celtics",     opp:"Milwaukee Bucks",     sport:"nba", stake:137.50, edge:0.072, status:"WON",  pnl: 82.40 },
+  { id:2,  team:"KC Chiefs",          opp:"Buffalo Bills",        sport:"nfl", stake:200.00, edge:0.059, status:"WON",  pnl:118.00 },
+  { id:3,  team:"Denver Nuggets",     opp:"OKC Thunder",          sport:"nba", stake: 88.00, edge:0.041, status:"LOST", pnl:-88.00 },
+  { id:4,  team:"LA Dodgers",         opp:"Atlanta Braves",       sport:"mlb", stake: 75.00, edge:0.063, status:"WON",  pnl: 52.50 },
+  { id:5,  team:"Golden State",       opp:"Phoenix Suns",         sport:"nba", stake:110.00, edge:0.048, status:"WON",  pnl: 66.00 },
+  { id:6,  team:"Baltimore Ravens",   opp:"Detroit Lions",        sport:"nfl", stake:175.00, edge:0.091, status:"LOST", pnl:-175.00 },
+  { id:7,  team:"NY Knicks",          opp:"Indiana Pacers",       sport:"nba", stake: 62.00, edge:0.035, status:"WON",  pnl: 37.20 },
+  { id:8,  team:"SF 49ers",           opp:"Dallas Cowboys",       sport:"nfl", stake:150.00, edge:0.077, status:"WON",  pnl: 97.50 },
+  { id:9,  team:"Cleveland Cavs",     opp:"Philadelphia 76ers",   sport:"nba", stake: 95.00, edge:0.052, status:"LOST", pnl:-95.00 },
+  { id:10, team:"NY Yankees",         opp:"Boston Red Sox",       sport:"mlb", stake: 80.00, edge:0.044, status:"WON",  pnl: 48.00 },
+  { id:11, team:"Minnesota T-Wolves", opp:"Miami Heat",           sport:"nba", stake:120.00, edge:0.068, status:"WON",  pnl: 84.00 },
+  { id:12, team:"Philly Eagles",      opp:"Cincinnati Bengals",   sport:"nfl", stake:185.00, edge:0.083, status:"LOST", pnl:-185.00 },
+  { id:13, team:"Colorado Avalanche", opp:"Tampa Bay Lightning",  sport:"nhl", stake: 55.00, edge:0.039, status:"WON",  pnl: 33.00 },
+  { id:14, team:"Dallas Mavericks",   opp:"LA Clippers",          sport:"nba", stake:100.00, edge:0.057, status:"WON",  pnl: 70.00 },
+  { id:15, team:"Houston Texans",     opp:"Jacksonville Jaguars", sport:"nfl", stake:130.00, edge:0.046, status:"WON",  pnl: 78.00 },
+  { id:16, team:"Chicago Bulls",      opp:"Orlando Magic",        sport:"nba", stake: 70.00, edge:0.031, status:"LOST", pnl:-70.00 },
+];
+const SEED_TOT = SEED_BETS.reduce((s,b)=>s+b.pnl, 0);
+const SEED_WINS = SEED_BETS.filter(b=>b.status==="WON").length;
+const BANKROLL_INIT = 2500;
+const SPORTS_CONFIG = [
+  { id:"nba",label:"NBA",icon:"🏀" },{ id:"nfl",label:"NFL",icon:"🏈" },
+  { id:"mlb",label:"MLB",icon:"⚾" },{ id:"nhl",label:"NHL",icon:"🏒" },
+  { id:"ncaab",label:"NCAAB",icon:"🎓" },{ id:"ncaaf",label:"NCAAF",icon:"🏟" },
+];
+const EVENT_TYPES = [
+  { id:"ml",label:"Moneyline",desc:"Win/lose outright" },
+  { id:"spread",label:"Spread",desc:"Point spread markets" },
+  { id:"total",label:"Total O/U",desc:"Over/under totals" },
+  { id:"props",label:"Props",desc:"Player propositions" },
+];
+
+// ── MINI COMPONENTS ────────────────────────────────────────────────────────────
+const Toggle = ({ on, onChange }) => (
+  <div onClick={()=>onChange(!on)} style={{width:38,height:21,borderRadius:11,background:on?"#00e5a0":"#1c1c22",border:`1px solid ${on?"#00e5a0":"#2c2c36"}`,cursor:"pointer",position:"relative",flexShrink:0,transition:"all .2s"}}>
+    <div style={{position:"absolute",top:3,left:on?20:3,width:13,height:13,borderRadius:"50%",background:on?"#000":"#3c3c46",transition:"left .2s",boxShadow:on?"0 0 5px #00e5a066":"none"}}/>
+  </div>
+);
+
+const Card = ({ children, style={} }) => (
+  <div style={{background:"#0e0e14",border:"1px solid #1c1c26",borderRadius:10,padding:"18px 20px",...style}}>{children}</div>
+);
+
+const SLabel = ({ children, accent="#00e5a0" }) => (
+  <div style={{fontSize:8,letterSpacing:2,color:"#666688",marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
+    <span style={{width:3,height:11,background:accent,borderRadius:2,display:"block",flexShrink:0}}/>
+    {children}
+  </div>
+);
+
+const KPI = ({ label, value, sub, color="#ffffff" }) => (
+  <div style={{background:"#0b0b10",border:"1px solid #181822",borderRadius:8,padding:"14px 16px"}}>
+    <div style={{fontSize:8,color:"#8888aa",letterSpacing:1.5,marginBottom:6}}>{label}</div>
+    <div style={{fontSize:21,fontWeight:900,color,fontFamily:"'DM Mono',monospace",lineHeight:1}}>{value}</div>
+    {sub && <div style={{fontSize:9,color:"#9999bb",marginTop:5}}>{sub}</div>}
+  </div>
+);
+
+const Spark = ({ data, color, w=110, h=28 }) => {
+  if (!data||data.length<2) return <div style={{width:w,height:h}}/>;
+  const mn=Math.min(...data),mx=Math.max(...data),rng=mx-mn||1;
+  const pts=data.map((v,i)=>`${(i/(data.length-1))*w},${h-2-((v-mn)/rng)*(h-5)}`).join(" ");
+  const uid=color.replace(/[^a-z0-9]/gi,"");
+  return (
+    <svg width={w} height={h}>
+      <defs>
+        <linearGradient id={`g${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity=".35"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <polygon points={`0,${h} ${pts} ${w},${h}`} fill={`url(#g${uid})`}/>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
+    </svg>
+  );
+};
+
+const PnLChart = ({ bets }) => {
+  const cum=bets.reduce((acc,b)=>{acc.push((acc.at(-1)??0)+b.pnl);return acc;},[]);
+  const mn=Math.min(0,...cum),mx=Math.max(...cum),rng=mx-mn||1;
+  const W=580,H=120;
+  const cx=i=>(i/(cum.length-1))*W;
+  const cy=v=>H-6-((v-mn)/rng)*(H-12);
+  const pts=cum.map((v,i)=>`${cx(i)},${cy(v)}`).join(" ");
+  const z=cy(0);
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="posG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#00e5a0" stopOpacity=".3"/>
+          <stop offset="100%" stopColor="#00e5a0" stopOpacity="0"/>
+        </linearGradient>
+        <linearGradient id="negG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ff4d6d" stopOpacity="0"/>
+          <stop offset="100%" stopColor="#ff4d6d" stopOpacity=".2"/>
+        </linearGradient>
+        <clipPath id="pc"><rect x="0" y="0" width={W} height={z}/></clipPath>
+        <clipPath id="nc"><rect x="0" y={z} width={W} height={H-z}/></clipPath>
+      </defs>
+      <line x1="0" y1={z} x2={W} y2={z} stroke="#1e1e2c" strokeWidth="1" strokeDasharray="4,4"/>
+      <polygon points={`0,${z} ${pts} ${W},${z}`} fill="url(#posG)" clipPath="url(#pc)"/>
+      <polygon points={`0,${z} ${pts} ${W},${z}`} fill="url(#negG)" clipPath="url(#nc)"/>
+      <polyline points={pts} fill="none" stroke="#00e5a0" strokeWidth="1.8" strokeLinejoin="round"/>
+    </svg>
+  );
+};
+
+const RangeRow = ({ label, hint, value, min, max, step=1, onChange, fmt, color="#00e5a0" }) => (
+  <div style={{marginBottom:20}}>
+    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+      <span style={{fontSize:10,color:"#ccccdd"}}>{label}</span>
+      <span style={{fontSize:11,fontFamily:"monospace",fontWeight:700,color}}>{fmt?fmt(value):value}</span>
+    </div>
+    <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(Number(e.target.value))} style={{width:"100%",accentColor:color,cursor:"pointer",height:3}}/>
+    {hint && <div style={{fontSize:9,color:"#9999bb",marginTop:4}}>{hint}</div>}
+  </div>
+);
+
+// ── MAIN APP ───────────────────────────────────────────────────────────────────
+function App() {
+  const [tab, setTab]       = useState("overview");
+  const [liveMode, setLiveMode] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+
+  // Live state from /api/state
+  const [botOn,      setBotOn]      = useState(false);
+  const [inCooldown, setInCooldown] = useState(false);
+  const [cooldownReason, setCooldownReason] = useState("");
+  const [cooldownAt, setCooldownAt] = useState(null);
+  const [todayLoss,  setTodayLoss]  = useState(88);
+  const [consecL,    setConsecL]    = useState(1);
+  const [openBets,   setOpenBets]   = useState([]);
+  const [liveLog,    setLiveLog]    = useState([]);
+  const [connected,  setConnected]  = useState(false);
+
+  // Risk controls (local config — sent to server via env vars in production)
+  const [dailyLoss,      setDailyLoss]      = useState(400);
+  const [maxBet,         setMaxBet]         = useState(100);
+  const [maxConsec,      setMaxConsec]      = useState(4);
+  const [kellyFrac,      setKellyFrac]      = useState(25);
+  const [minEdge,        setMinEdge]        = useState(5);
+  const [maxConcurrent,  setMaxConcurrent]  = useState(3);
+  const [minLiquidity,   setMinLiquidity]   = useState(500);
+  const [maxHoursToGame, setMaxHoursToGame] = useState(4);
+  const [betLockSet,     setBetLockSet]     = useState(new Set(["nba-celtics-bucks-"+new Date().toISOString().slice(0,10)]));
+
+  // API key vault
+  const [apiKey,  setApiKey]  = useState(()=>Vault.load());
+  const [showKey, setShowKey] = useState(false);
+  const [saved,   setSaved]   = useState(false);
+
+  // Cooldown
+  const [cooldownTriggered, setCooldownTriggered] = useState(false);
+
+  // Log
+  const logRef = useRef(null);
+  const [localLog, setLocalLog] = useState([
+    { t:"--:--:--", msg:"Dashboard loaded · waiting for bot connection...", c:"#aaaacc" },
+  ]);
+
+  const today = new Date().toISOString().slice(0,10);
+  const isGameLocked = (k) => betLockSet.has(`${k}-${today}`);
+
+  // ── POLL /api/state every 5 seconds ──────────────────────────────────────────
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const data = await api("/api/state");
+        setBotOn(data.running ?? false);
+        setInCooldown(data.inCooldown ?? false);
+        setTodayLoss(data.todayLoss ?? 0);
+        setConsecL(data.consecutiveLosses ?? 0);
+        setOpenBets(data.openBets ?? []);
+        if (data.inCooldown && data.cooldownAt) setCooldownAt(new Date(data.cooldownAt));
+        if (data.log && data.log.length > 0) setLiveLog(data.log);
+        setConnected(true);
+      } catch {
+        setConnected(false);
+      }
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=9999; },[liveLog, localLog]);
+
+  const displayLog = liveLog.length > 0 ? liveLog : localLog;
+
+  // ── BOT CONTROLS ──────────────────────────────────────────────────────────────
+  const startBot = async () => {
+    if (inCooldown) return;
+    await api("/api/start", "POST");
+  };
+  const stopBot = async () => {
+    await api("/api/stop", "POST");
+  };
+  const clearCooldown = async () => {
+    await api("/api/cooldown/clear", "POST");
+  };
+  const toggleBot = () => { botOn ? stopBot() : startBot(); };
+
+  // ── DERIVED ───────────────────────────────────────────────────────────────────
+  const BETS    = SEED_BETS;
+  const TOT_PNL = SEED_TOT;
+  const WINS    = SEED_WINS;
+  const winRate = Math.round((WINS/BETS.length)*100);
+  const avgEdge = (BETS.reduce((s,b)=>s+b.edge,0)/BETS.length*100).toFixed(1);
+  const bankroll = BANKROLL_INIT + TOT_PNL;
+  const roi = ((TOT_PNL/BANKROLL_INIT)*100).toFixed(1);
+  const lossR = Math.min(1, todayLoss/dailyLoss);
+  const sPnl = id => BETS.filter(b=>b.sport===id).reduce((s,b)=>s+b.pnl,0);
+  const sWR  = id => { const sb=BETS.filter(b=>b.sport===id); return sb.length?Math.round(sb.filter(b=>b.status==="WON").length/sb.length*100):0; };
+  const sCum = id => BETS.filter(b=>b.sport===id).reduce((a,b)=>{ a.push((a.at(-1)??0)+b.pnl); return a; },[0]);
+  const sportOn = { nba:true, nfl:true, mlb:true, nhl:true, ncaab:false, ncaaf:false };
+  const [eventOn, setEventOn] = useState({ ml:true, spread:false, total:false, props:false });
+
+  const TABS = [
+    {id:"overview",label:"OVERVIEW"},{id:"risk",label:"RISK CTRL"},
+    {id:"markets",label:"MARKETS"},{id:"pnl",label:"P&L"},
+    {id:"history",label:"HISTORY"},{id:"keys",label:"API VAULT"},
+    {id:"log",label:"BOT LOG"},
+  ];
+
+  const OPEN_BETS_DEMO = openBets.length > 0 ? openBets : [
+    { gameId:"ob1", team:"KC Chiefs",      opp:"Buffalo Bills",   sport:"nfl", stake:200, edge:0.059, mktP:0.581, fairP:0.640, at:"11:15", liq:4200 },
+    { gameId:"ob2", team:"Boston Celtics", opp:"Milwaukee Bucks", sport:"nba", stake:137, edge:0.072, mktP:0.609, fairP:0.681, at:"09:31", liq:2850 },
+    { gameId:"ob3", team:"LA Dodgers",     opp:"Atlanta Braves",  sport:"mlb", stake:75,  edge:0.063, mktP:0.614, fairP:0.677, at:"14:02", liq:1100 },
+  ];
+
+  return (
+    <div style={{minHeight:"100vh",background:"#07070b",fontFamily:"'DM Mono','Courier New',monospace",color:"#ffffff"}}>
+
+      {/* TOP BAR */}
+      <header style={{background:"#050509",borderBottom:"1px solid #111118",padding:"0 28px",display:"flex",alignItems:"center",height:52,position:"sticky",top:0,zIndex:300,gap:0}}>
+        <div style={{marginRight:28,display:"flex",alignItems:"baseline",gap:10}}>
+          <span style={{fontFamily:"'Bricolage Grotesque',sans-serif",fontSize:17,fontWeight:800,color:"#fff",letterSpacing:-0.5}}>
+            KALSHI<span style={{color:"#00e5a0"}}>BOT</span>
+          </span>
+          <span style={{fontSize:8,color:connected?"#00e5a044":"#ff4d6d44",letterSpacing:1}}>
+            {connected ? "● CONNECTED" : "● OFFLINE"}
+          </span>
+        </div>
+        <nav style={{display:"flex",flex:1,height:52}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",borderBottom:`2px solid ${tab===t.id?"#00e5a0":"transparent"}`,color:tab===t.id?"#ffffff":"#606078",padding:"0 13px",height:52,cursor:"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:1,transition:"color .15s",whiteSpace:"nowrap"}}>{t.label}</button>
+          ))}
+        </nav>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:9,color:liveMode?"#ff4d6d":"#4d9fff",letterSpacing:.5}}>{liveMode?"⚠ LIVE":"PAPER"}</span>
+            <Toggle on={liveMode} onChange={v=>{ if(v) setShowModal(true); else setLiveMode(false); }}/>
+          </div>
+          <button onClick={toggleBot} disabled={inCooldown} style={{background:inCooldown?"rgba(245,166,35,.12)":botOn?"rgba(255,77,109,.12)":"rgba(0,229,160,.12)",border:`1px solid ${inCooldown?"#f5a62344":botOn?"#ff4d6d44":"#00e5a044"}`,color:inCooldown?"#f5a623":botOn?"#ff4d6d":"#00e5a0",borderRadius:6,padding:"6px 18px",cursor:inCooldown?"not-allowed":"pointer",fontSize:9,fontFamily:"inherit",fontWeight:700,letterSpacing:1,display:"flex",alignItems:"center",gap:7,opacity:inCooldown?.7:1}}>
+            <span style={{width:5,height:5,borderRadius:"50%",background:inCooldown?"#f5a623":botOn?"#ff4d6d":"#00e5a0",display:"inline-block",animation:inCooldown||botOn?"blink .9s infinite":"none"}}/>
+            {inCooldown?"COOLDOWN":botOn?"STOP BOT":"START BOT"}
+          </button>
+        </div>
+      </header>
+
+      {/* LIVE WARNING */}
+      {liveMode && (
+        <div style={{background:"#160810",borderBottom:"1px solid rgba(255,77,109,.25)",padding:"7px 28px",fontSize:9,color:"#ff4d6d",display:"flex",alignItems:"center",gap:10}}>
+          <span style={{animation:"blink .8s infinite"}}>⚠</span>
+          LIVE MODE ACTIVE — Real funds will be wagered via your Kalshi API key.
+          <button onClick={()=>setLiveMode(false)} style={{marginLeft:"auto",background:"none",border:"1px solid rgba(255,77,109,.35)",color:"#ff4d6d",borderRadius:4,padding:"2px 10px",cursor:"pointer",fontSize:9,fontFamily:"inherit"}}>Revert to Paper</button>
+        </div>
+      )}
+
+      {/* HALT BANNER */}
+      {todayLoss >= dailyLoss && !inCooldown && (
+        <div style={{background:"#120808",borderBottom:"1px solid rgba(255,77,109,.2)",padding:"7px 28px",fontSize:9,color:"#ff4d6d",textAlign:"center"}}>
+          ⛔ DAILY LOSS LIMIT REACHED (${dailyLoss}) — Bot halted
+        </div>
+      )}
+
+      {/* COOLDOWN BANNER */}
+      {inCooldown && (
+        <div style={{background:"#100e04",borderBottom:"1px solid rgba(245,166,35,.3)",padding:"10px 28px",display:"flex",alignItems:"center",gap:16}}>
+          <span style={{fontSize:16,animation:"blink .9s infinite"}}>⏸</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,color:"#f5a623",fontWeight:700,marginBottom:2}}>BOT IN COOLDOWN — {consecL} consecutive losses hit limit</div>
+            <div style={{fontSize:9,color:"#6a5a20"}}>Scanning paused · Manual restart required</div>
+          </div>
+          <button onClick={clearCooldown} style={{background:"rgba(0,229,160,.15)",border:"1px solid #00e5a0",color:"#00e5a0",borderRadius:6,padding:"6px 16px",cursor:"pointer",fontSize:9,fontFamily:"inherit",fontWeight:700}}>▶ Clear & Restart Bot</button>
+        </div>
+      )}
+
+      {/* CONFIRM MODAL */}
+      {showModal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:"#0e0e16",border:"1px solid rgba(255,77,109,.4)",borderRadius:12,padding:32,maxWidth:380,width:"90%",textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:12}}>⚠</div>
+            <div style={{fontFamily:"'Bricolage Grotesque',sans-serif",fontSize:17,color:"#fff",marginBottom:10}}>Enable Live Mode?</div>
+            <div style={{fontSize:11,color:"#9999bb",marginBottom:24,lineHeight:1.8}}>
+              Real money will be wagered on Kalshi.<br/>
+              Daily loss limit: <span style={{color:"#ff4d6d"}}>${dailyLoss}</span> · Max bet: <span style={{color:"#ff4d6d"}}>${maxBet}</span>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setShowModal(false)} style={{flex:1,background:"#111",border:"1px solid #222",color:"#666",borderRadius:7,padding:"10px",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>Cancel</button>
+              <button onClick={()=>{setLiveMode(true);setShowModal(false);}} style={{flex:1,background:"rgba(255,77,109,.15)",border:"1px solid #ff4d6d",color:"#ff4d6d",borderRadius:7,padding:"10px",cursor:"pointer",fontSize:10,fontFamily:"inherit",fontWeight:700}}>Confirm Live</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <main style={{maxWidth:1080,margin:"0 auto",padding:"24px 28px 60px"}}>
+
+        {/* ── OVERVIEW ── */}
+        {tab==="overview" && (
+          <div style={{animation:"fadein .3s ease"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
+              <KPI label="BANKROLL"  value={`$${bankroll.toFixed(0)}`} sub={`Started $${BANKROLL_INIT}`}/>
+              <KPI label="NET P&L"   value={`${TOT_PNL>=0?"+":""}$${TOT_PNL.toFixed(0)}`} color={TOT_PNL>=0?"#00e5a0":"#ff4d6d"} sub={`ROI ${roi}%`}/>
+              <KPI label="TODAY P&L" value={`+$${BETS.slice(0,5).reduce((s,b)=>s+b.pnl,0).toFixed(0)}`} color="#00e5a0" sub="Last 5 bets"/>
+              <KPI label="WIN RATE"  value={`${winRate}%`} color="#f5a623" sub={`${WINS}W · ${BETS.length-WINS}L`}/>
+              <KPI label="AVG EDGE"  value={`${avgEdge}%`} color="#4d9fff" sub={`${BETS.length} total bets`}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"7fr 3fr",gap:14,marginBottom:14}}>
+              <Card>
+                <SLabel accent="#00e5a0">CUMULATIVE P&L CURVE</SLabel>
+                <PnLChart bets={BETS}/>
+              </Card>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <Card style={{flex:1}}>
+                  <SLabel accent="#4d9fff">BOT STATUS</SLabel>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <span style={{width:8,height:8,borderRadius:"50%",background:inCooldown?"#f5a623":botOn?"#00e5a0":"#282832",boxShadow:inCooldown?"0 0 8px #f5a623":botOn?"0 0 8px #00e5a0":"none",display:"block",animation:inCooldown||botOn?"blink 1.2s infinite":"none"}}/>
+                    <span style={{fontSize:11,color:inCooldown?"#f5a623":botOn?"#00e5a0":"#555570",fontWeight:700}}>{inCooldown?"COOLDOWN":botOn?"RUNNING":"IDLE"}</span>
+                    <span style={{marginLeft:"auto",fontSize:8,color:liveMode?"#ff4d6d":"#4d9fff",background:liveMode?"rgba(255,77,109,.1)":"rgba(77,159,255,.1)",border:`1px solid ${liveMode?"rgba(255,77,109,.3)":"rgba(77,159,255,.3)"}`,borderRadius:3,padding:"2px 7px"}}>{liveMode?"LIVE $":"PAPER"}</span>
+                  </div>
+                  <div style={{fontSize:10,color:"#aaaacc",lineHeight:2.2}}>
+                    <div>Min edge <span style={{color:"#fff"}}>{minEdge}%</span></div>
+                    <div>Max bet  <span style={{color:"#fff"}}>${maxBet}</span></div>
+                    <div>Kelly    <span style={{color:"#fff"}}>{kellyFrac}%</span></div>
+                    <div>Loss limit <span style={{color:"#fff"}}>${dailyLoss}</span></div>
+                    <div>Consec stop <span style={{color:"#fff"}}>{maxConsec}L</span></div>
+                    <div>Max open <span style={{color:"#fff"}}>{maxConcurrent} bets</span></div>
+                    <div>Max hrs to game <span style={{color:"#f5a623"}}>{maxHoursToGame}h</span></div>
+                  </div>
+                </Card>
+                <Card>
+                  <div style={{fontSize:8,color:"#8888aa",letterSpacing:1,marginBottom:8}}>DAILY LOSS METER</div>
+                  <div style={{fontSize:16,fontWeight:800,color:lossR>.8?"#ff4d6d":"#fff",marginBottom:7}}>${todayLoss} <span style={{fontSize:10,color:"#8888aa",fontWeight:400}}>/ ${dailyLoss}</span></div>
+                  <div style={{height:5,background:"#111",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{width:`${lossR*100}%`,height:"100%",background:lossR>.8?"#ff4d6d":"#00e5a0",transition:"width .4s,background .3s"}}/>
+                  </div>
+                  <div style={{fontSize:9,color:"#9999bb",marginTop:5}}>${dailyLoss-todayLoss} remaining</div>
+                </Card>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+              {SPORTS_CONFIG.filter(s=>sportOn[s.id]).map(s=>{
+                const p=sPnl(s.id),wr=sWR(s.id),cd=sCum(s.id),n=BETS.filter(b=>b.sport===s.id).length;
+                return (
+                  <Card key={s.id}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <span style={{fontSize:12,fontWeight:700,color:"#fff"}}>{s.icon} {s.label}</span>
+                      <span style={{fontSize:13,fontWeight:800,color:p>=0?"#00e5a0":"#ff4d6d",fontFamily:"monospace"}}>{p>=0?"+":""}${p.toFixed(0)}</span>
+                    </div>
+                    <Spark data={cd.length>1?cd:[0,0]} color={p>=0?"#00e5a0":"#ff4d6d"}/>
+                    <div style={{fontSize:9,color:"#9999bb",marginTop:6}}>WR {wr}% · {n} bets</div>
+                  </Card>
+                );
+              })}
+            </div>
+            {/* OPEN BETS */}
+            <Card>
+              <SLabel accent="#f5a623">OPEN BETS — PENDING SETTLEMENT ({OPEN_BETS_DEMO.length}/{maxConcurrent})</SLabel>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px",gap:8,padding:"0 0 6px",borderBottom:"1px solid #141420",fontSize:8,color:"#8888aa",letterSpacing:1}}>
+                <span>MATCHUP</span><span>SPORT</span><span>STAKE</span><span>EDGE</span><span>FAIR</span><span>MKT</span><span>LIQUIDITY</span>
+              </div>
+              {OPEN_BETS_DEMO.map(b=>(
+                <div key={b.gameId||b.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px",gap:8,padding:"9px 0",borderBottom:"1px solid #0e0e16",alignItems:"center"}}>
+                  <div>
+                    <span style={{fontSize:11,color:"#fff",fontWeight:700}}>{b.team}</span>
+                    <span style={{fontSize:9,color:"#9999bb"}}> vs {b.opp||b.awayTeam}</span>
+                  </div>
+                  <span style={{fontSize:9,color:"#aaaacc"}}>{(b.sport||"").toUpperCase()}</span>
+                  <span style={{fontSize:11,color:"#fff",fontFamily:"monospace"}}>${b.stake}</span>
+                  <span style={{fontSize:11,color:"#4d9fff",fontFamily:"monospace"}}>+{((b.edge||0)*100).toFixed(1)}%</span>
+                  <span style={{fontSize:11,color:"#00e5a0",fontFamily:"monospace"}}>{((b.fairP||b.fairProb||0)*100).toFixed(1)}¢</span>
+                  <span style={{fontSize:11,color:"#aaaacc",fontFamily:"monospace"}}>{((b.mktP||b.marketProb||0)*100).toFixed(1)}¢</span>
+                  <span style={{fontSize:11,fontFamily:"monospace",color:(b.liq||b.openInterest||0)<minLiquidity?"#ff4d6d":"#aaaacc"}}>${(b.liq||b.openInterest||0).toLocaleString()}</span>
+                </div>
+              ))}
+              <div style={{display:"flex",gap:16,marginTop:10,fontSize:9,color:"#8888aa"}}>
+                <span>Total exposed: <span style={{color:"#f5a623"}}>${OPEN_BETS_DEMO.reduce((s,b)=>s+b.stake,0)}</span></span>
+                <span>Slots: <span style={{color:OPEN_BETS_DEMO.length>=maxConcurrent?"#ff4d6d":"#00e5a0"}}>{OPEN_BETS_DEMO.length}/{maxConcurrent}</span></span>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── RISK CTRL ── */}
+        {tab==="risk" && (
+          <div style={{animation:"fadein .3s ease",display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+            <Card>
+              <SLabel accent="#ff4d6d">LOSS PROTECTION</SLabel>
+              <RangeRow label="Daily Loss Limit — auto-halt" hint="Bot stops when daily losses hit this amount." value={dailyLoss} min={50} max={2000} step={50} onChange={setDailyLoss} fmt={v=>`$${v}`} color="#ff4d6d"/>
+              <RangeRow label="Max Consecutive Losses" hint="Triggers cooldown after this many back-to-back losses." value={maxConsec} min={2} max={10} onChange={setMaxConsec} fmt={v=>`${v} in a row`} color="#ff4d6d"/>
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                  <span style={{fontSize:10,color:"#ccccdd"}}>Cooldown Mode</span>
+                  <span style={{fontSize:11,fontWeight:700,color:"#f5a623"}}>MANUAL RESTART</span>
+                </div>
+                <div style={{background:"rgba(245,166,35,.07)",border:"1px solid rgba(245,166,35,.2)",borderRadius:6,padding:"10px 12px",fontSize:10,color:"#d4a830",lineHeight:1.8}}>
+                  When the consecutive loss limit is hit, the bot <strong style={{color:"#f5a623"}}>stops permanently</strong>. An operator must press <strong style={{color:"#00e5a0"}}>Clear &amp; Restart</strong> to resume.
+                </div>
+              </div>
+              <div style={{padding:"11px 13px",background:"rgba(255,77,109,.06)",border:"1px solid rgba(255,77,109,.15)",borderRadius:7}}>
+                <div style={{fontSize:8,color:"#ff4d6d",letterSpacing:1,marginBottom:8}}>LIVE RISK STATE</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                  {[["Today's Loss",`$${todayLoss}`,todayLoss>dailyLoss*.7?"#ff4d6d":"#fff"],["Consec. Losses",`${consecL}/${maxConsec}`,consecL>=maxConsec-1?"#f5a623":"#fff"],["Status",inCooldown?"COOLDOWN":todayLoss>=dailyLoss?"HALTED":botOn?"RUNNING":"IDLE",inCooldown?"#f5a623":todayLoss>=dailyLoss?"#ff4d6d":botOn?"#00e5a0":"#555570"]].map(([l,v,c])=>(
+                    <div key={l} style={{background:"#0a0a10",borderRadius:5,padding:"8px 10px"}}>
+                      <div style={{fontSize:8,color:"#8888aa",marginBottom:4}}>{l}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:c}}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                {inCooldown && (
+                  <button onClick={clearCooldown} style={{marginTop:10,width:"100%",background:"rgba(0,229,160,.12)",border:"1px solid #00e5a044",color:"#00e5a0",borderRadius:5,padding:"7px",cursor:"pointer",fontSize:9,fontFamily:"inherit",fontWeight:700}}>▶ Clear &amp; Restart</button>
+                )}
+              </div>
+            </Card>
+            <Card>
+              <SLabel accent="#00e5a0">BET SIZING &amp; FILTERS</SLabel>
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:10,color:"#ccccdd"}}>Max Bet Size — hard cap</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:9,color:"#aaaacc"}}>$</span>
+                    <input type="number" min={1} max={200} value={maxBet} onChange={e=>setMaxBet(Math.min(200,Math.max(1,Number(e.target.value))))} style={{width:54,background:"#0a0a12",border:"1px solid #222230",color:"#00e5a0",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",textAlign:"center",fontWeight:700}}/>
+                  </div>
+                </div>
+                <input type="range" min={1} max={200} step={1} value={maxBet} onChange={e=>setMaxBet(Number(e.target.value))} style={{width:"100%",accentColor:"#00e5a0",cursor:"pointer",height:3}}/>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"#555570",marginTop:3}}>
+                  <span>$1</span>
+                  <div style={{display:"flex",gap:2}}>{[50,100,150,200].map(v=><button key={v} onClick={()=>setMaxBet(v)} style={{background:maxBet===v?"#00e5a022":"transparent",border:`1px solid ${maxBet===v?"#00e5a044":"#1a1a24"}`,color:maxBet===v?"#00e5a0":"#555570",borderRadius:3,padding:"1px 5px",cursor:"pointer",fontSize:8,fontFamily:"inherit"}}>${v}</button>)}</div>
+                  <span>$200</span>
+                </div>
+              </div>
+              <RangeRow label="Fractional Kelly %" hint="25% is standard conservative." value={kellyFrac} min={5} max={100} step={5} onChange={setKellyFrac} fmt={v=>`${v}%`} color="#4d9fff"/>
+              <RangeRow label="Minimum Edge to Bet" hint="Only bet when fair prob − market prob ≥ this." value={minEdge} min={1} max={20} step={0.5} onChange={setMinEdge} fmt={v=>`${v}%`} color="#f5a623"/>
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:10,color:"#ccccdd"}}>Max Concurrent Open Bets</span>
+                  <input type="number" min={1} max={20} value={maxConcurrent} onChange={e=>setMaxConcurrent(Math.min(20,Math.max(1,Number(e.target.value))))} style={{width:46,background:"#0a0a12",border:"1px solid #222230",color:"#f5a623",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",textAlign:"center",fontWeight:700}}/>
+                </div>
+                <input type="range" min={1} max={20} step={1} value={maxConcurrent} onChange={e=>setMaxConcurrent(Number(e.target.value))} style={{width:"100%",accentColor:"#f5a623",cursor:"pointer",height:3}}/>
+              </div>
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:10,color:"#ccccdd"}}>Min Kalshi Liquidity ($)</span>
+                  <input type="number" min={0} max={10000} step={100} value={minLiquidity} onChange={e=>setMinLiquidity(Math.max(0,Number(e.target.value)))} style={{width:68,background:"#0a0a12",border:"1px solid #222230",color:"#4d9fff",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",textAlign:"center",fontWeight:700}}/>
+                </div>
+                <input type="range" min={0} max={10000} step={100} value={minLiquidity} onChange={e=>setMinLiquidity(Number(e.target.value))} style={{width:"100%",accentColor:"#4d9fff",cursor:"pointer",height:3}}/>
+              </div>
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:10,color:"#ccccdd"}}>Max Hours to Game</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input type="number" min={1} max={72} value={maxHoursToGame} onChange={e=>setMaxHoursToGame(Math.min(72,Math.max(1,Number(e.target.value))))} style={{width:46,background:"#0a0a12",border:"1px solid #222230",color:"#f5a623",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",textAlign:"center",fontWeight:700}}/>
+                    <span style={{fontSize:9,color:"#555570"}}>hrs</span>
+                  </div>
+                </div>
+                <input type="range" min={1} max={72} step={1} value={maxHoursToGame} onChange={e=>setMaxHoursToGame(Number(e.target.value))} style={{width:"100%",accentColor:"#f5a623",cursor:"pointer",height:3}}/>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"#555570",marginTop:3}}>
+                  <span>1h</span>
+                  <div style={{display:"flex",gap:2}}>{[2,4,12,24,48,72].map(v=><button key={v} onClick={()=>setMaxHoursToGame(v)} style={{background:maxHoursToGame===v?"#f5a62322":"transparent",border:`1px solid ${maxHoursToGame===v?"#f5a62344":"#1a1a24"}`,color:maxHoursToGame===v?"#f5a623":"#555570",borderRadius:3,padding:"1px 5px",cursor:"pointer",fontSize:8,fontFamily:"inherit"}}>{v}h</button>)}</div>
+                  <span>72h</span>
+                </div>
+              </div>
+              <div style={{background:"rgba(0,229,160,.05)",border:"1px solid rgba(0,229,160,.15)",borderRadius:7,padding:"12px 14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div style={{fontSize:10,color:"#00e5a0",fontWeight:700}}>1 Bet Per Game Per Day — ENFORCED</div>
+                  <span style={{fontSize:8,background:"rgba(0,229,160,.15)",color:"#00e5a0",border:"1px solid rgba(0,229,160,.3)",borderRadius:3,padding:"2px 6px"}}>ACTIVE</span>
+                </div>
+                <div style={{fontSize:9,color:"#7ac0a0",lineHeight:1.8}}>Before placing any bet the bot checks a game lock registry. If a bet has already been placed on that game today, the signal is rejected. Resets at midnight.</div>
+                <div style={{marginTop:8,fontSize:9,color:"#88c0a0"}}>Locked today: <span style={{color:"#00e5a0"}}>{betLockSet.size}</span> game{betLockSet.size!==1?"s":""}</div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── MARKETS ── */}
+        {tab==="markets" && (
+          <div style={{animation:"fadein .3s ease",display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+            <Card>
+              <SLabel accent="#f5a623">SPORTS TOGGLES</SLabel>
+              {SPORTS_CONFIG.map(s=>{
+                const n=BETS.filter(b=>b.sport===s.id).length,p=sPnl(s.id);
+                return (
+                  <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid #101018"}}>
+                    <div>
+                      <div style={{fontSize:12,color:sportOn[s.id]?"#fff":"#555570",fontWeight:sportOn[s.id]?700:400,marginBottom:2}}>{s.icon} {s.label}</div>
+                      <div style={{fontSize:9,color:"#9999bb"}}>{sportOn[s.id]&&n>0?`${n} bets · ${p>=0?"+":""}$${p.toFixed(0)} P&L`:sportOn[s.id]?"Enabled":"Disabled"}</div>
+                    </div>
+                    <Toggle on={!!sportOn[s.id]} onChange={()=>{}}/>
+                  </div>
+                );
+              })}
+            </Card>
+            <Card>
+              <SLabel accent="#4d9fff">EVENT TYPE TOGGLES</SLabel>
+              {[{id:"ml",label:"Moneyline",desc:"Win/lose outright"},{id:"spread",label:"Spread",desc:"Point spread"},{id:"total",label:"Total O/U",desc:"Over/under"},{id:"props",label:"Props",desc:"Player props"}].map(e=>(
+                <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 0",borderBottom:"1px solid #101018"}}>
+                  <div>
+                    <div style={{fontSize:12,color:eventOn[e.id]?"#fff":"#555570",fontWeight:eventOn[e.id]?700:400,marginBottom:2}}>{e.label}</div>
+                    <div style={{fontSize:9,color:"#9999bb"}}>{e.desc}</div>
+                  </div>
+                  <Toggle on={!!eventOn[e.id]} onChange={v=>setEventOn(p=>({...p,[e.id]:v}))}/>
+                </div>
+              ))}
+            </Card>
+          </div>
+        )}
+
+        {/* ── P&L ── */}
+        {tab==="pnl" && (
+          <div style={{animation:"fadein .3s ease"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+              <KPI label="NET P&L"       value={`${TOT_PNL>=0?"+":""}$${TOT_PNL.toFixed(2)}`} color={TOT_PNL>=0?"#00e5a0":"#ff4d6d"}/>
+              <KPI label="TOTAL WAGERED" value={`$${BETS.reduce((s,b)=>s+b.stake,0).toFixed(0)}`}/>
+              <KPI label="WIN RATE"      value={`${winRate}%`} color="#f5a623" sub={`${WINS}W · ${BETS.length-WINS}L`}/>
+              <KPI label="ROI"           value={`${roi}%`} color={Number(roi)>0?"#00e5a0":"#ff4d6d"}/>
+            </div>
+            <Card style={{marginBottom:14}}>
+              <SLabel accent="#00e5a0">RUNNING P&L — ALL BETS</SLabel>
+              <PnLChart bets={BETS}/>
+            </Card>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+              {SPORTS_CONFIG.map(s=>{
+                const sb=BETS.filter(b=>b.sport===s.id);
+                if(!sb.length) return null;
+                const p=sPnl(s.id),wr=sWR(s.id),cd=sCum(s.id);
+                const sROI=((p/sb.reduce((a,b)=>a+b.stake,0))*100).toFixed(1);
+                return (
+                  <Card key={s.id}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                      <span style={{fontSize:12,color:"#fff",fontWeight:700}}>{s.icon} {s.label}</span>
+                      <span style={{fontSize:14,fontWeight:800,color:p>=0?"#00e5a0":"#ff4d6d",fontFamily:"monospace"}}>{p>=0?"+":""}${p.toFixed(0)}</span>
+                    </div>
+                    <Spark data={cd.length>1?cd:[0,p]} color={p>=0?"#00e5a0":"#ff4d6d"} w={170} h={36}/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginTop:10}}>
+                      {[["WIN %",`${wr}%`,"#f5a623"],["ROI",`${sROI}%`,p>=0?"#00e5a0":"#ff4d6d"],["BETS",sb.length,"#fff"]].map(([l,v,c])=>(
+                        <div key={l} style={{background:"#0b0b10",borderRadius:5,padding:"6px 8px"}}>
+                          <div style={{fontSize:8,color:"#8888aa",marginBottom:3}}>{l}</div>
+                          <div style={{fontSize:12,fontWeight:700,color:c}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── HISTORY ── */}
+        {tab==="history" && (
+          <div style={{animation:"fadein .3s ease"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+              <KPI label="TOTAL BETS"    value={BETS.length}/>
+              <KPI label="TOTAL WAGERED" value={`$${BETS.reduce((s,b)=>s+b.stake,0).toFixed(0)}`}/>
+              <KPI label="NET P&L"       value={`${TOT_PNL>=0?"+":""}$${TOT_PNL.toFixed(2)}`} color={TOT_PNL>=0?"#00e5a0":"#ff4d6d"}/>
+              <KPI label="WIN RATE"      value={`${winRate}%`} color="#f5a623"/>
+            </div>
+            <Card style={{padding:0,overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:"32px 1fr 58px 80px 58px 72px 80px",padding:"8px 16px",borderBottom:"1px solid #111118",fontSize:8,color:"#8888aa",letterSpacing:1}}>
+                <span>#</span><span>MATCHUP</span><span>SPORT</span><span>STAKE</span><span>EDGE</span><span>STATUS</span><span>P&amp;L</span>
+              </div>
+              <div style={{maxHeight:480,overflowY:"auto"}}>
+                {BETS.map((b,i)=>(
+                  <div key={b.id} className="tr" style={{display:"grid",gridTemplateColumns:"32px 1fr 58px 80px 58px 72px 80px",padding:"9px 16px",borderBottom:"1px solid #0d0d12",background:i%2?"#0a0a0e":"transparent",fontSize:11,alignItems:"center"}}>
+                    <span style={{fontSize:9,color:"#555570"}}>{b.id}</span>
+                    <div><div style={{color:"#fff"}}>{b.team}</div><div style={{fontSize:9,color:"#9999bb"}}>vs {b.opp}</div></div>
+                    <span style={{fontSize:9,color:"#aaaacc"}}>{b.sport.toUpperCase()}</span>
+                    <span style={{fontFamily:"monospace",color:"#fff"}}>${b.stake.toFixed(0)}</span>
+                    <span style={{color:"#4d9fff",fontFamily:"monospace"}}>+{(b.edge*100).toFixed(1)}%</span>
+                    <span style={{color:b.status==="WON"?"#00e5a0":"#ff4d6d",fontWeight:700}}>{b.status}</span>
+                    <span style={{color:b.pnl>=0?"#00e5a0":"#ff4d6d",fontFamily:"monospace",fontWeight:700}}>{b.pnl>=0?"+":""}${b.pnl.toFixed(0)}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── API VAULT ── */}
+        {tab==="keys" && (
+          <div style={{animation:"fadein .3s ease",display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+            <Card>
+              <SLabel accent="#f5a623">KALSHI API KEY</SLabel>
+              <div style={{fontSize:9,color:"#9999bb",marginBottom:14,lineHeight:1.8}}>Stored in sessionStorage only — wiped when tab closes. Never sent to any server.</div>
+              <div style={{position:"relative",marginBottom:8}}>
+                <input type={showKey?"text":"password"} value={apiKey} onChange={e=>{setApiKey(e.target.value);}} placeholder="Paste your Kalshi API key here" style={{width:"100%",background:"#080810",border:"1px solid #1c1c28",color:"#fff",borderRadius:6,padding:"9px 40px 9px 11px",fontSize:11,fontFamily:"'DM Mono',monospace",outline:"none"}}/>
+                <button onClick={()=>setShowKey(!showKey)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#555570",cursor:"pointer",fontSize:12}}>{showKey?"🙈":"👁"}</button>
+              </div>
+              {apiKey && <div style={{fontSize:9,color:saved?"#00e5a0":"#9999bb",marginBottom:4}}>{saved?"✓ Saved to session vault":"Unsaved"}</div>}
+              <div style={{display:"flex",gap:8,marginTop:8}}>
+                <button onClick={()=>{Vault.save(apiKey);setSaved(true);setTimeout(()=>setSaved(false),2500);}} style={{flex:1,background:"rgba(0,229,160,.1)",border:"1px solid rgba(0,229,160,.3)",color:"#00e5a0",borderRadius:6,padding:"8px",cursor:"pointer",fontSize:10,fontFamily:"inherit",fontWeight:700}}>Save</button>
+                <button onClick={()=>{Vault.wipe();setApiKey("");}} style={{flex:1,background:"rgba(255,77,109,.08)",border:"1px solid rgba(255,77,109,.2)",color:"#ff4d6d",borderRadius:6,padding:"8px",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>Wipe</button>
+              </div>
+            </Card>
+            <Card>
+              <SLabel accent="#4d9fff">RENDER ENV VARS</SLabel>
+              <div style={{fontSize:10,color:"#9999bb",lineHeight:1.9,marginBottom:14}}>Set these in your Render dashboard → Environment → Add Variable:</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {["KALSHI_API_KEY","KALSHI_API_SECRET","ODDS_API_KEY","PAPER_MODE","MIN_EDGE_PCT","MAX_BET_USD","DAILY_LOSS_LIMIT","MAX_CONSEC_LOSSES","MAX_CONCURRENT","MIN_LIQUIDITY","MAX_HOURS_TO_GAME","KELLY_FRACTION"].map(v=>(
+                  <div key={v} style={{background:"#0c0c14",border:"1px solid #181828",borderRadius:4,padding:"3px 9px",fontSize:9,color:"#00e5a0",fontFamily:"inherit"}}>{v}</div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── BOT LOG ── */}
+        {tab==="log" && (
+          <div style={{animation:"fadein .3s ease"}}>
+            <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontSize:9,color:connected?"#00e5a0":"#ff4d6d",display:"flex",alignItems:"center",gap:5}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:connected?"#00e5a0":"#ff4d6d",display:"inline-block",animation:connected?"blink 2s infinite":"none"}}/>
+                {connected?"Live — polling every 5s":"Disconnected from bot"}
+              </span>
+              <div style={{marginLeft:"auto",fontSize:9,color:"#8888aa"}}>
+                <span style={{color:inCooldown?"#f5a623":botOn?"#00e5a0":"#555570"}}>{inCooldown?"⏸ COOLDOWN":botOn?"● RUNNING":"○ IDLE"}</span>
+                {" "}&nbsp;·&nbsp; {displayLog.length} lines
+              </div>
+            </div>
+            <div ref={logRef} style={{background:"#040407",border:"1px solid #0f0f18",borderRadius:10,padding:"14px 16px",height:520,overflowY:"auto"}}>
+              {displayLog.map((e,i)=>(
+                <div key={i} style={{display:"flex",gap:14,marginBottom:3,fontSize:10}}>
+                  <span style={{color:"#555570",flexShrink:0,userSelect:"none"}}>{e.t}</span>
+                  <span style={{color:"#555570",flexShrink:0}}>›</span>
+                  <span style={{color:e.c||"#aaaacc"}}>{e.msg}</span>
+                </div>
+              ))}
+              {inCooldown && <div style={{display:"flex",gap:14,fontSize:10}}><span style={{color:"#555570"}}>{new Date().toTimeString().slice(0,8)}</span><span style={{color:"#555570"}}>›</span><span style={{color:"#f5a623",animation:"blink .9s infinite"}}>⏸ COOLDOWN — awaiting manual restart</span></div>}
+              {botOn && !inCooldown && <div style={{display:"flex",gap:14,fontSize:10}}><span style={{color:"#555570"}}>{new Date().toTimeString().slice(0,8)}</span><span style={{color:"#555570"}}>›</span><span style={{color:"#00e5a0",animation:"blink .7s infinite"}}>█</span></div>}
+            </div>
+            <div style={{marginTop:8,fontSize:8,color:"#555570",display:"flex",gap:16}}>
+              {[["info","#aaaacc"],["result","#00e5a0"],["signal","#f5a623"],["paper","#4d9fff"],["halt/warn","#ff4d6d"]].map(([l,c])=>(
+                <span key={l}><span style={{color:c}}>■</span> {l}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
