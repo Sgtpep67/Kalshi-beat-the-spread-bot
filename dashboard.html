@@ -47,26 +47,6 @@ const Vault = {
 };
 
 // ── SEED DATA (shown before first API poll) ────────────────────────────────────
-const SEED_BETS = [
-  { id:1,  team:"Boston Celtics",     opp:"Milwaukee Bucks",     sport:"nba", stake:137.50, edge:0.072, status:"WON",  pnl: 82.40 },
-  { id:2,  team:"KC Chiefs",          opp:"Buffalo Bills",        sport:"nfl", stake:200.00, edge:0.059, status:"WON",  pnl:118.00 },
-  { id:3,  team:"Denver Nuggets",     opp:"OKC Thunder",          sport:"nba", stake: 88.00, edge:0.041, status:"LOST", pnl:-88.00 },
-  { id:4,  team:"LA Dodgers",         opp:"Atlanta Braves",       sport:"mlb", stake: 75.00, edge:0.063, status:"WON",  pnl: 52.50 },
-  { id:5,  team:"Golden State",       opp:"Phoenix Suns",         sport:"nba", stake:110.00, edge:0.048, status:"WON",  pnl: 66.00 },
-  { id:6,  team:"Baltimore Ravens",   opp:"Detroit Lions",        sport:"nfl", stake:175.00, edge:0.091, status:"LOST", pnl:-175.00 },
-  { id:7,  team:"NY Knicks",          opp:"Indiana Pacers",       sport:"nba", stake: 62.00, edge:0.035, status:"WON",  pnl: 37.20 },
-  { id:8,  team:"SF 49ers",           opp:"Dallas Cowboys",       sport:"nfl", stake:150.00, edge:0.077, status:"WON",  pnl: 97.50 },
-  { id:9,  team:"Cleveland Cavs",     opp:"Philadelphia 76ers",   sport:"nba", stake: 95.00, edge:0.052, status:"LOST", pnl:-95.00 },
-  { id:10, team:"NY Yankees",         opp:"Boston Red Sox",       sport:"mlb", stake: 80.00, edge:0.044, status:"WON",  pnl: 48.00 },
-  { id:11, team:"Minnesota T-Wolves", opp:"Miami Heat",           sport:"nba", stake:120.00, edge:0.068, status:"WON",  pnl: 84.00 },
-  { id:12, team:"Philly Eagles",      opp:"Cincinnati Bengals",   sport:"nfl", stake:185.00, edge:0.083, status:"LOST", pnl:-185.00 },
-  { id:13, team:"Colorado Avalanche", opp:"Tampa Bay Lightning",  sport:"nhl", stake: 55.00, edge:0.039, status:"WON",  pnl: 33.00 },
-  { id:14, team:"Dallas Mavericks",   opp:"LA Clippers",          sport:"nba", stake:100.00, edge:0.057, status:"WON",  pnl: 70.00 },
-  { id:15, team:"Houston Texans",     opp:"Jacksonville Jaguars", sport:"nfl", stake:130.00, edge:0.046, status:"WON",  pnl: 78.00 },
-  { id:16, team:"Chicago Bulls",      opp:"Orlando Magic",        sport:"nba", stake: 70.00, edge:0.031, status:"LOST", pnl:-70.00 },
-];
-const SEED_TOT = SEED_BETS.reduce((s,b)=>s+b.pnl, 0);
-const SEED_WINS = SEED_BETS.filter(b=>b.status==="WON").length;
 const BANKROLL_INIT = 2500;
 const SPORTS_CONFIG = [
   { id:"nba",label:"NBA",icon:"🏀" },{ id:"nfl",label:"NFL",icon:"🏈" },
@@ -244,27 +224,7 @@ function App() {
   const today = new Date().toISOString().slice(0,10);
   const isGameLocked = (k) => betLockSet.has(`${k}-${today}`);
 
-  // ── POLL /api/state every 5 seconds ──────────────────────────────────────────
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const data = await api("/api/state");
-        setBotOn(data.running ?? false);
-        setInCooldown(data.inCooldown ?? false);
-        setTodayLoss(data.todayLoss ?? 0);
-        setConsecL(data.consecutiveLosses ?? 0);
-        setOpenBets(data.openBets ?? []);
-        if (data.inCooldown && data.cooldownAt) setCooldownAt(new Date(data.cooldownAt));
-        if (data.log && data.log.length > 0) setLiveLog(data.log);
-        setConnected(true);
-      } catch {
-        setConnected(false);
-      }
-    };
-    poll();
-    const id = setInterval(poll, 5000);
-    return () => clearInterval(id);
-  }, []);
+  // poll moved to derived section above
 
   useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=9999; },[liveLog, localLog]);
 
@@ -283,12 +243,37 @@ function App() {
   };
   const toggleBot = () => { botOn ? stopBot() : startBot(); };
 
-  // ── DERIVED ───────────────────────────────────────────────────────────────────
-  const BETS    = SEED_BETS;
-  const TOT_PNL = SEED_TOT;
-  const WINS    = SEED_WINS;
-  const winRate = Math.round((WINS/BETS.length)*100);
-  const avgEdge = (BETS.reduce((s,b)=>s+b.edge,0)/BETS.length*100).toFixed(1);
+  // ── DERIVED — from real bot state ────────────────────────────────────────────
+  const [settledBets, setSettledBets] = useState([]);
+
+  // Pull settledBets from /api/state poll
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const data = await api("/api/state");
+        setBotOn(data.running ?? false);
+        setInCooldown(data.inCooldown ?? false);
+        setTodayLoss(data.todayLoss ?? 0);
+        setConsecL(data.consecutiveLosses ?? 0);
+        setOpenBets(data.openBets ?? []);
+        setSettledBets(data.settledBets ?? []);
+        if (data.inCooldown && data.cooldownAt) setCooldownAt(new Date(data.cooldownAt));
+        if (data.log && data.log.length > 0) setLiveLog(data.log);
+        setConnected(true);
+      } catch {
+        setConnected(false);
+      }
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const BETS    = settledBets;
+  const TOT_PNL = BETS.reduce((s,b)=>s+b.pnl,0);
+  const WINS    = BETS.filter(b=>b.status==="WON").length;
+  const winRate = BETS.length > 0 ? Math.round((WINS/BETS.length)*100) : 0;
+  const avgEdge = BETS.length > 0 ? (BETS.reduce((s,b)=>s+b.edge,0)/BETS.length*100).toFixed(1) : "0.0";
   const bankroll = BANKROLL_INIT + TOT_PNL;
   const roi = ((TOT_PNL/BANKROLL_INIT)*100).toFixed(1);
   const lossR = Math.min(1, todayLoss/dailyLoss);
@@ -305,11 +290,7 @@ function App() {
     {id:"log",label:"BOT LOG"},
   ];
 
-  const OPEN_BETS_DEMO = openBets.length > 0 ? openBets : [
-    { gameId:"ob1", team:"KC Chiefs",      opp:"Buffalo Bills",   sport:"nfl", stake:200, edge:0.059, mktP:0.581, fairP:0.640, at:"11:15", liq:4200 },
-    { gameId:"ob2", team:"Boston Celtics", opp:"Milwaukee Bucks", sport:"nba", stake:137, edge:0.072, mktP:0.609, fairP:0.681, at:"09:31", liq:2850 },
-    { gameId:"ob3", team:"LA Dodgers",     opp:"Atlanta Braves",  sport:"mlb", stake:75,  edge:0.063, mktP:0.614, fairP:0.677, at:"14:02", liq:1100 },
-  ];
+  const OPEN_BETS_DEMO = openBets;
 
   return (
     <div style={{minHeight:"100vh",background:"#07070b",fontFamily:"'DM Mono','Courier New',monospace",color:"#ffffff"}}>
@@ -454,6 +435,11 @@ function App() {
               <div style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px",gap:8,padding:"0 0 6px",borderBottom:"1px solid #141420",fontSize:8,color:"#8888aa",letterSpacing:1}}>
                 <span>MATCHUP</span><span>SPORT</span><span>STAKE</span><span>EDGE</span><span>FAIR</span><span>MKT</span><span>LIQUIDITY</span>
               </div>
+              {OPEN_BETS_DEMO.length === 0 && (
+                <div style={{padding:"24px 0",textAlign:"center",color:"#555570",fontSize:10}}>
+                  No open bets — start the bot and run a scan to find signals
+                </div>
+              )}
               {OPEN_BETS_DEMO.map(b=>(
                 <div key={b.gameId||b.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px",gap:8,padding:"9px 0",borderBottom:"1px solid #0e0e16",alignItems:"center"}}>
                   <div>
@@ -655,6 +641,11 @@ function App() {
                 <span>#</span><span>MATCHUP</span><span>SPORT</span><span>STAKE</span><span>EDGE</span><span>STATUS</span><span>P&amp;L</span>
               </div>
               <div style={{maxHeight:480,overflowY:"auto"}}>
+                {BETS.length === 0 && (
+                  <div style={{padding:"40px 0",textAlign:"center",color:"#555570",fontSize:10}}>
+                    No settled bets yet — history will appear here after the bot places and resolves real trades
+                  </div>
+                )}
                 {BETS.map((b,i)=>(
                   <div key={b.id} className="tr" style={{display:"grid",gridTemplateColumns:"32px 1fr 58px 80px 58px 72px 80px",padding:"9px 16px",borderBottom:"1px solid #0d0d12",background:i%2?"#0a0a0e":"transparent",fontSize:11,alignItems:"center"}}>
                     <span style={{fontSize:9,color:"#555570"}}>{b.id}</span>
