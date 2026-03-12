@@ -60,12 +60,24 @@ function buildAuthHeaders(method, shortPath, apiKeyId, privateKey) {
 
 function parseMarket(market) {
   try {
-    const { ticker, title, yes_bid, yes_ask, last_price, open_interest, close_time, status } = market;
+    const {
+      ticker, title, open_interest, close_time, status,
+      // New _dollars fields (cents fields removed March 12 2026)
+      yes_bid_dollars, yes_ask_dollars, last_price_dollars,
+      // Fallback to cents fields for older responses
+      yes_bid, yes_ask, last_price,
+    } = market;
     if (status !== "open") return null;
-    if (last_price == null && yes_ask == null) return null;
-    const rawPrice = (yes_bid != null && yes_ask != null) ? (yes_bid + yes_ask) / 2 : last_price;
-    if (rawPrice == null || rawPrice <= 0 || rawPrice >= 100) return null;
-    const kalshiProb     = rawPrice / 100;
+
+    // Use _dollars fields first, fall back to cents / 100
+    const bidD  = yes_bid_dollars  != null ? parseFloat(yes_bid_dollars)  : (yes_bid  != null ? yes_bid  / 100 : null);
+    const askD  = yes_ask_dollars  != null ? parseFloat(yes_ask_dollars)  : (yes_ask  != null ? yes_ask  / 100 : null);
+    const lastD = last_price_dollars != null ? parseFloat(last_price_dollars) : (last_price != null ? last_price / 100 : null);
+
+    if (lastD == null && askD == null) return null;
+    const rawPrice = (bidD != null && askD != null) ? (bidD + askD) / 2 : (lastD ?? askD);
+    if (rawPrice == null || rawPrice <= 0 || rawPrice >= 1) return null;
+    const kalshiProb = rawPrice; // already in dollar/probability form (0-1)
     const hoursUntilGame = close_time ? (new Date(close_time) - Date.now()) / 3_600_000 : null;
     if (hoursUntilGame !== null && hoursUntilGame < 0) return null;
     const teams = extractTeams(title);
@@ -131,16 +143,21 @@ async function getKalshiMarkets(apiKeyId, privateKey, opts = {}) {
   return parsed;
 }
 
-async function placeBet({ gameId, team, stake, apiKeyId, privateKey }) {
-  const count = Math.max(1, Math.floor(stake));
-  const path  = "/portfolio/orders";
+async function placeBet({ gameId, team, stake, marketProb, apiKeyId, privateKey }) {
+  // As of March 12 2026, Kalshi removed type:"market" — must use limit orders
+  // We pass yes_price in cents (integer) at the current ask to get immediate fill
+  const count     = Math.max(1, Math.floor(stake));
+  const path      = "/portfolio/orders";
+  // marketProb is 0-1 probability = dollar price; convert to cents for limit price
+  // Add 2 cent buffer above ask to ensure fill
+  const limitCents = Math.min(99, Math.round((marketProb + 0.02) * 100));
   const orderPayload = {
     ticker:          gameId,
     client_order_id: `kb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    type:            "market",
     action:          "buy",
     side:            "yes",
     count,
+    yes_price:       limitCents,  // limit price in cents (integer)
   };
   try {
     const response = await axios.post(`${BASE_URL}/portfolio/orders`, orderPayload, {
