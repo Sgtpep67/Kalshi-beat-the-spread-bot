@@ -207,6 +207,9 @@ function App() {
   const [maxHoursToGame, setMaxHoursToGame] = useState(4);
   const [betLockSet,     setBetLockSet]     = useState(new Set(["nba-celtics-bucks-"+new Date().toISOString().slice(0,10)]));
 
+  // Kalshi real balance
+  const [kalshiBalance, setKalshiBalance] = useState(null);
+
   // API key vault
   const [apiKey,  setApiKey]  = useState(()=>Vault.load());
   const [showKey, setShowKey] = useState(false);
@@ -258,6 +261,14 @@ function App() {
         setOpenBets(data.openBets ?? []);
         setSettledBets(data.settledBets ?? []);
         if (data.inCooldown && data.cooldownAt) setCooldownAt(new Date(data.cooldownAt));
+        // Fetch real Kalshi balance every poll cycle
+        try {
+          const bal = await api("/api/balance");
+          if (bal.ok && bal.balance) {
+            const cents = bal.balance.balance ?? bal.balance.available_balance ?? null;
+            if (cents !== null) setKalshiBalance(cents / 100);
+          }
+        } catch {}
         if (data.log && data.log.length > 0) setLiveLog(data.log);
         setConnected(true);
       } catch {
@@ -374,7 +385,7 @@ function App() {
         {tab==="overview" && (
           <div style={{animation:"fadein .3s ease"}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
-              <KPI label="BANKROLL"  value={`$${bankroll.toFixed(0)}`} sub={`Started $${BANKROLL_INIT}`}/>
+              <KPI label="BANKROLL"  value={kalshiBalance !== null ? `$${kalshiBalance.toFixed(2)}` : `$${bankroll.toFixed(0)}`} sub={kalshiBalance !== null ? "Live Kalshi balance" : `Est. from $${BANKROLL_INIT}`}/>
               <KPI label="NET P&L"   value={`${TOT_PNL>=0?"+":""}$${TOT_PNL.toFixed(0)}`} color={TOT_PNL>=0?"#00e5a0":"#ff4d6d"} sub={`ROI ${roi}%`}/>
               <KPI label="TODAY P&L" value={`+$${BETS.slice(0,5).reduce((s,b)=>s+b.pnl,0).toFixed(0)}`} color="#00e5a0" sub="Last 5 bets"/>
               <KPI label="WIN RATE"  value={`${winRate}%`} color="#f5a623" sub={`${WINS}W · ${BETS.length-WINS}L`}/>
