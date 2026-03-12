@@ -295,7 +295,7 @@ function App() {
   const sPnl = id => BETS.filter(b=>b.sport===id).reduce((s,b)=>s+b.pnl,0);
   const sWR  = id => { const sb=BETS.filter(b=>b.sport===id); return sb.length?Math.round(sb.filter(b=>b.status==="WON").length/sb.length*100):0; };
   const sCum = id => BETS.filter(b=>b.sport===id).reduce((a,b)=>{ a.push((a.at(-1)??0)+b.pnl); return a; },[0]);
-  const sportOn = { nba:true, nfl:true, mlb:true, nhl:true, ncaab:false, ncaaf:false };
+  const [sportOn, setSportOn] = useState({ nba:true, nfl:true, mlb:true, nhl:true, ncaab:false, ncaaf:false });
   const [eventOn, setEventOn] = useState({ ml:true, spread:false, total:false, props:false });
 
   const TABS = [
@@ -580,7 +580,7 @@ function App() {
                       <div style={{fontSize:12,color:sportOn[s.id]?"#fff":"#555570",fontWeight:sportOn[s.id]?700:400,marginBottom:2}}>{s.icon} {s.label}</div>
                       <div style={{fontSize:9,color:"#9999bb"}}>{sportOn[s.id]&&n>0?`${n} bets · ${p>=0?"+":""}$${p.toFixed(0)} P&L`:sportOn[s.id]?"Enabled":"Disabled"}</div>
                     </div>
-                    <Toggle on={!!sportOn[s.id]} onChange={()=>{}}/>
+                    <Toggle on={!!sportOn[s.id]} onChange={v => setSportOn(p => ({...p, [s.id]: v}))}/>
                   </div>
                 );
               })}
