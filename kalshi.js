@@ -32,13 +32,20 @@ function signMessage(message, privateKeyPem) {
   const sign = crypto.createSign("RSA-SHA256");
   sign.update(message);
   sign.end();
-  return sign.sign(privateKeyPem, "base64");
+  // Kalshi requires RSA-PSS padding
+  return sign.sign({
+    key: privateKeyPem,
+    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+    saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+  }, "base64");
 }
 
 function buildAuthHeaders(method, path, apiKeyId, privateKey) {
   const timestampMs = Date.now().toString();
-  const message     = buildMessage(timestampMs, method, path);
-  const signature   = signMessage(message, privateKey);
+  // Strip query params before signing — Kalshi signs path only, not query string
+  const pathOnly = path.split("?")[0];
+  const message  = buildMessage(timestampMs, method, pathOnly);
+  const signature = signMessage(message, privateKey);
   return {
     "KALSHI-ACCESS-KEY":       apiKeyId,
     "KALSHI-ACCESS-TIMESTAMP": timestampMs,
@@ -158,7 +165,12 @@ async function getBalance(apiKeyId, privateKey) {
       headers: buildAuthHeaders("GET", path, apiKeyId, privateKey),
       timeout: 10000,
     });
-    return response.data;
+    const data = response.data;
+    // Kalshi returns balance and portfolio_value in cents
+    return {
+      balance:         (data.balance ?? 0) / 100,         // available cash in dollars
+      portfolio_value: (data.portfolio_value ?? 0) / 100, // cash + open positions value
+    };
   } catch (err) {
     console.error("[kalshi] Failed to fetch balance:", err.message);
     return null;
