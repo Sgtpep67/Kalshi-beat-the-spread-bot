@@ -1,3 +1,6 @@
+const path = require("path");
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "dashboard.html")));
+app.get("/api/health", (req, res) => res.json({ ok: true }));
 require("dotenv").config();
 const express = require("express");
 const { getKalshiMarkets, placeBet } = require("./kalshi");
