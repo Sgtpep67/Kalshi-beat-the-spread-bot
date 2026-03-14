@@ -1,22 +1,32 @@
-const axios  = require("axios");
-const crypto = require("crypto");
+var axios  = require("axios");
+var crypto = require("crypto");
 
-const BASE_URL = "https://api.elections.kalshi.com/trade-api/v2";
+var BASE_URL = "https://api.elections.kalshi.com/trade-api/v2";
 
-const SPORTS_PREFIXES = [
-  "KXNBA", "KXNFL", "KXMLB", "KXNHL", "KXNCAAB", "KXNCAAF",
-  "NBA", "NFL", "MLB", "NHL",
+// Individual game series tickers on Kalshi
+// These are the series that have actual game-by-game markets
+var GAME_SERIES = [
+  "KXNBAGAME",       // NBA game winner
+  "KXNFLGAME",       // NFL game winner
+  "KXMLBGAME",       // MLB game winner
+  "KXNHLGAME",       // NHL game winner
+  "KXNCAABGAME",     // College basketball game
+  "KXNCAAMB1HWINNER",// College basketball 1H winner
+  "KXNCAAMBGAME",    // Men's college basketball game
+  "KXNCAAFGAME",     // College football game
+  "KXNCAAFD3GAME",   // College football D3 game
+  "KXWNBAGAME",      // WNBA game winner
+  "KXNBASERIES",     // NBA series winner
+  "KXNHLSERIES",     // NHL series winner
+  "KXMLBSERIES",     // MLB series winner
+  "KXWNBASERIES",    // WNBA series winner
 ];
 
 function makeHeaders(method, endpoint, apiKeyId, privateKey) {
   var fullPath    = "/trade-api/v2" + endpoint.split("?")[0];
   var timestampMs = Date.now().toString();
   var message     = timestampMs + method.toUpperCase() + fullPath;
-
-  // Kalshi uses RSA-PSS with SHA256
-  // Handle both PKCS#1 (-----BEGIN RSA PRIVATE KEY-----) 
-  // and PKCS#8 (-----BEGIN PRIVATE KEY-----) formats
-  var signer = crypto.createSign("SHA256");
+  var signer      = crypto.createSign("SHA256");
   signer.update(message);
   signer.end();
   var signature = signer.sign({
@@ -24,7 +34,6 @@ function makeHeaders(method, endpoint, apiKeyId, privateKey) {
     padding:    crypto.constants.RSA_PKCS1_PSS_PADDING,
     saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
   }, "base64");
-
   return {
     "KALSHI-ACCESS-KEY":       apiKeyId,
     "KALSHI-ACCESS-TIMESTAMP": timestampMs,
@@ -34,20 +43,9 @@ function makeHeaders(method, endpoint, apiKeyId, privateKey) {
   };
 }
 
-function isSportsMarket(m) {
-  var ticker = (m.ticker || "").toUpperCase();
-  var series = (m.event_ticker || "").toUpperCase();
-  var title  = (m.title || "").toUpperCase();
-  return SPORTS_PREFIXES.some(function(p) {
-    return ticker.startsWith(p) || series.startsWith(p) ||
-      title.indexOf(" NBA ") > -1 || title.indexOf(" NFL ") > -1 ||
-      title.indexOf(" MLB ") > -1 || title.indexOf(" NHL ") > -1;
-  });
-}
-
 function parsePrice(market) {
-  var bid  = market.yes_bid_dollars  != null ? parseFloat(market.yes_bid_dollars)  : null;
-  var ask  = market.yes_ask_dollars  != null ? parseFloat(market.yes_ask_dollars)  : null;
+  var bid  = market.yes_bid_dollars   != null ? parseFloat(market.yes_bid_dollars)   : null;
+  var ask  = market.yes_ask_dollars   != null ? parseFloat(market.yes_ask_dollars)   : null;
   var last = market.last_price_dollars != null ? parseFloat(market.last_price_dollars) : null;
   var bidC  = market.yes_bid    != null ? market.yes_bid    / 100 : null;
   var askC  = market.yes_ask    != null ? market.yes_ask    / 100 : null;
@@ -63,14 +61,26 @@ function parsePrice(market) {
 
 function extractTeams(title) {
   if (!title) return { home: null, away: null };
-  var vs = title.match(/^(.+?)\s+vs\.?\s+(.+?)(?:\s*[-\u2014(]|$)/i);
+  var vs = title.match(/^(.+?)\s+vs\.?\s+(.+?)(?:\s*[-\-(]|$)/i);
   if (vs) return { home: vs[1].trim(), away: vs[2].trim() };
-  var at = title.match(/^(.+?)\s+@\s+(.+?)(?:\s*[-\u2014(]|$)/i);
+  var at = title.match(/^(.+?)\s+@\s+(.+?)(?:\s*[-\-(]|$)/i);
   if (at) return { home: at[2].trim(), away: at[1].trim() };
   return { home: title.trim(), away: null };
 }
 
-function parseMarket(m) {
+function getSportFromSeries(seriesTicker) {
+  if (!seriesTicker) return "unknown";
+  var t = seriesTicker.toUpperCase();
+  if (t.indexOf("NBA") > -1 || t.indexOf("WNBA") > -1) return "nba";
+  if (t.indexOf("NFL") > -1) return "nfl";
+  if (t.indexOf("MLB") > -1) return "mlb";
+  if (t.indexOf("NHL") > -1) return "nhl";
+  if (t.indexOf("NCAAF") > -1) return "ncaaf";
+  if (t.indexOf("NCAAB") > -1 || t.indexOf("NCAAMB") > -1 || t.indexOf("NCAAWB") > -1) return "ncaab";
+  return "sports";
+}
+
+function parseMarket(m, seriesTicker) {
   try {
     if (m.status !== "open") return null;
     var price = parsePrice(m);
@@ -89,8 +99,42 @@ function parseMarket(m) {
       openInterest:   m.open_interest != null ? m.open_interest : 0,
       hoursUntilGame: hoursUntilGame,
       closeTime:      m.close_time,
+      sport:          getSportFromSeries(seriesTicker || m.event_ticker),
     };
   } catch(e) { return null; }
+}
+
+async function fetchMarketsBySeries(seriesTicker, apiKeyId, privateKey) {
+  var allMarkets = [];
+  var cursor     = null;
+  var page       = 0;
+
+  do {
+    var endpoint = "/markets";
+    var params   = { status: "open", limit: 100, series_ticker: seriesTicker };
+    if (cursor) params.cursor = cursor;
+
+    try {
+      var resp = await axios.get(BASE_URL + endpoint, {
+        headers: makeHeaders("GET", endpoint, apiKeyId, privateKey),
+        params:  params,
+        timeout: 12000,
+      });
+      var data  = resp.data;
+      var batch = data.markets || [];
+      allMarkets = allMarkets.concat(batch);
+      cursor = data.cursor || null;
+      page++;
+    } catch(err) {
+      var status = err.response ? err.response.status : null;
+      if (status !== 404) {
+        console.log("[kalshi] series " + seriesTicker + " error: " + err.message);
+      }
+      break;
+    }
+  } while (cursor && page < 5);
+
+  return allMarkets;
 }
 
 async function getKalshiMarkets(apiKeyId, privateKey) {
@@ -100,47 +144,36 @@ async function getKalshiMarkets(apiKeyId, privateKey) {
   }
 
   var allMarkets = [];
-  var cursor     = null;
-  var page       = 0;
 
-  do {
-    var endpoint = "/markets";
-    var params   = { status: "open", limit: 200 };
-    if (cursor) params.cursor = cursor;
-    try {
-      var resp = await axios.get(BASE_URL + endpoint, {
-        headers: makeHeaders("GET", endpoint, apiKeyId, privateKey),
-        params:  params,
-        timeout: 15000,
+  // Fetch markets from each game series in parallel
+  var fetches = GAME_SERIES.map(function(series) {
+    return fetchMarketsBySeries(series, apiKeyId, privateKey).then(function(markets) {
+      return { series: series, markets: markets };
+    }).catch(function() {
+      return { series: series, markets: [] };
+    });
+  });
+
+  var results = await Promise.all(fetches);
+
+  results.forEach(function(result) {
+    if (result.markets.length > 0) {
+      console.log("[kalshi] " + result.series + ": " + result.markets.length + " markets");
+      result.markets.forEach(function(m) {
+        m._series = result.series;
       });
-      var data = resp.data;
-      var batch = data.markets || [];
-      allMarkets = allMarkets.concat(batch);
-      cursor = data.cursor || null;
-      page++;
-      console.log("[kalshi] page " + page + ": " + batch.length + " markets fetched");
-    } catch(err) {
-      var status = err.response ? err.response.status : null;
-      if (status === 401) {
-        console.log("[kalshi] 401 Unauthorized - check API key and private key in Render env vars");
-      } else {
-        console.log("[kalshi] fetch error: " + err.message);
-      }
-      break;
+      allMarkets = allMarkets.concat(result.markets);
     }
-  } while (cursor && page < 10);
+  });
 
-  console.log("[kalshi] total raw markets: " + allMarkets.length);
+  console.log("[kalshi] total game markets fetched: " + allMarkets.length);
 
-  var sports = allMarkets.filter(isSportsMarket);
-  console.log("[kalshi] sports markets after filter: " + sports.length);
+  var parsed = allMarkets.map(function(m) {
+    return parseMarket(m, m._series);
+  }).filter(Boolean);
 
-  if (allMarkets.length > 0 && sports.length === 0) {
-    var sample = allMarkets.slice(0, 5).map(function(m) { return m.ticker; }).join(", ");
-    console.log("[kalshi] sample tickers (no sports found): " + sample);
-  }
-
-  return sports.map(parseMarket).filter(Boolean);
+  console.log("[kalshi] valid parsed markets: " + parsed.length);
+  return parsed;
 }
 
 async function placeBet(opts) {
@@ -185,17 +218,12 @@ async function getBalance(apiKeyId, privateKey) {
       headers: makeHeaders("GET", endpoint, apiKeyId, privateKey),
       timeout: 10000,
     });
-    var d = resp.data;
-    console.log("[kalshi] balance response: " + JSON.stringify(d));
-    var bal  = d.balance_dollars  != null ? parseFloat(d.balance_dollars)
-             : d.balance          != null ? d.balance / 100
-             : 0;
-    var port = d.portfolio_value_dollars != null ? parseFloat(d.portfolio_value_dollars)
-             : d.portfolio_value         != null ? d.portfolio_value / 100
-             : 0;
+    var d    = resp.data;
+    var bal  = d.balance          != null ? d.balance          / 100 : 0;
+    var port = d.portfolio_value  != null ? d.portfolio_value  / 100 : 0;
     return { balance: bal, portfolio_value: port };
   } catch(err) {
-    console.log("[kalshi] balance error: " + (err.response ? err.response.status : "") + " " + err.message);
+    console.log("[kalshi] balance error: " + err.message);
     return null;
   }
 }
