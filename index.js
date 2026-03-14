@@ -305,6 +305,24 @@ app.get("/api/debug/markets", async (req, res) => {
   }
 });
 
+app.get("/api/keycheck", (req, res) => {
+  const key = CONFIG.KALSHI_PRIVATE_KEY || "";
+  res.json({
+    keyId:          CONFIG.KALSHI_API_KEY,
+    keyIdLength:    (CONFIG.KALSHI_API_KEY || "").length,
+    keyLength:      key.length,
+    hasBeginLine:   key.includes("-----BEGIN RSA PRIVATE KEY-----"),
+    hasEndLine:     key.includes("-----END RSA PRIVATE KEY-----"),
+    hasRealNewlines: key.includes("
+"),
+    hasLiteralBackslashN: key.includes("\n"),
+    firstChars:     key.substring(0, 40),
+    lastChars:      key.substring(key.length - 40),
+    lineCount:      key.split("
+").length,
+  });
+});
+
 app.get("/api/balance", async (req, res) => {
   try {
     const balance = await getBalance(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
