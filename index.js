@@ -274,13 +274,39 @@ app.get("/api/keycheck", function(req, res) {
 
 app.get("/api/debug/markets", async function(req, res) {
   try {
-    const markets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+    const axios  = require("axios");
+    const crypto = require("crypto");
+    const BASE   = "https://trading-api.kalshi.com/trade-api/v2";
+    const ts     = Date.now().toString();
+    const sigPath = "/trade-api/v2/markets";
+    const msg    = ts + "GET" + sigPath;
+    const signer = crypto.createSign("RSA-SHA256");
+    signer.update(msg);
+    signer.end();
+    const sig = signer.sign({
+      key:        CONFIG.KALSHI_PRIVATE_KEY,
+      padding:    crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+    }, "base64");
+    const resp = await axios.get(BASE + "/markets", {
+      headers: {
+        "KALSHI-ACCESS-KEY":       CONFIG.KALSHI_API_KEY,
+        "KALSHI-ACCESS-TIMESTAMP": ts,
+        "KALSHI-ACCESS-SIGNATURE": sig,
+        "Accept": "application/json",
+      },
+      params: { status: "open", limit: 20 },
+      timeout: 10000,
+    });
+    const all = resp.data.markets || [];
     res.json({
-      count: markets.length,
-      sample: markets.slice(0, 10),
+      total: all.length,
+      sample: all.slice(0, 20).map(function(m) {
+        return { ticker: m.ticker, title: m.title, event_ticker: m.event_ticker, status: m.status };
+      }),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, status: err.response ? err.response.status : null });
   }
 });
 
