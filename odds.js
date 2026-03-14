@@ -1,7 +1,6 @@
 var axios = require("axios");
 
 var BASE_URL = "https://api.the-odds-api.com/v4";
-
 var TARGET_BOOKS = ["pinnacle", "draftkings", "fanduel", "betmgm"];
 
 var SPORT_MAP = {
@@ -28,7 +27,7 @@ function devig(rawHome, rawAway) {
 
 async function getSharpOdds(apiKey, sport) {
   if (!apiKey) {
-    console.log("[odds] No ODDS_API_KEY set  skipping");
+    console.log("[odds] No ODDS_API_KEY set");
     return {};
   }
   var sportKey = SPORT_MAP[sport];
@@ -36,97 +35,94 @@ async function getSharpOdds(apiKey, sport) {
     console.log("[odds] Unknown sport: " + sport);
     return {};
   }
+  console.log("[odds] Fetching " + sport + " => " + sportKey);
 
   var response;
   try {
     response = await axios.get(BASE_URL + "/sports/" + sportKey + "/odds", {
       timeout: 10000,
       params: {
-        apiKey:      apiKey,
-        regions:     "us",
-        markets:     "h2h",
-        bookmakers:  TARGET_BOOKS.join(","),
-        oddsFormat:  "american",
+        apiKey:     apiKey,
+        regions:    "us",
+        markets:    "h2h",
+        bookmakers: TARGET_BOOKS.join(","),
+        oddsFormat: "american",
       },
     });
   } catch(err) {
     var status = err.response ? err.response.status : null;
-    if (status === 401) console.log("[odds] Invalid API key");
-    else if (status === 422) console.log("[odds] Sport not available right now: " + sport);
-    else if (status === 429) console.log("[odds] Rate limit hit");
-    else console.log("[odds] Fetch error for " + sport + ": " + err.message);
+    var body   = err.response && err.response.data ? JSON.stringify(err.response.data).slice(0,200) : "";
+    console.log("[odds] " + sport + " error " + status + ": " + err.message + " " + body);
     return {};
   }
 
   var games  = response.data || [];
   var result = {};
-
-  var remaining = response.headers ? response.headers["x-requests-remaining"] : null;
-  if (remaining != null) console.log("[odds] API calls remaining: " + remaining);
+  var rem    = response.headers ? response.headers["x-requests-remaining"] : null;
+  if (rem != null) console.log("[odds] API calls remaining: " + rem);
+  console.log("[odds] " + sport + " raw games returned: " + games.length);
 
   for (var i = 0; i < games.length; i++) {
     var game      = games[i];
     var homeTeam  = game.home_team;
     var awayTeam  = game.away_team;
     var homeProbs = [];
-
     var bookmakers = game.bookmakers || [];
-    for (var j = 0; j < bookmakers.length; j++) {
-      var bm     = bookmakers[j];
-      var market = null;
-      var mkts   = bm.markets || [];
-      for (var k = 0; k < mkts.length; k++) {
-        if (mkts[k].key === "h2h") { market = mkts[k]; break; }
-      }
-      if (!market) continue;
 
+    for (var j = 0; j < bookmakers.length; j++) {
+      var bm   = bookmakers[j];
+      var mkts = bm.markets || [];
+      var mkt  = null;
+      for (var k = 0; k < mkts.length; k++) {
+        if (mkts[k].key === "h2h") { mkt = mkts[k]; break; }
+      }
+      if (!mkt) continue;
       var homeOut = null;
       var awayOut = null;
-      var outcomes = market.outcomes || [];
+      var outcomes = mkt.outcomes || [];
       for (var l = 0; l < outcomes.length; l++) {
         if (outcomes[l].name === homeTeam) homeOut = outcomes[l];
         if (outcomes[l].name === awayTeam) awayOut = outcomes[l];
       }
       if (!homeOut || !awayOut) continue;
-
       try {
         var rawHome = 1 / americanToDecimal(homeOut.price);
         var rawAway = 1 / americanToDecimal(awayOut.price);
         homeProbs.push(devig(rawHome, rawAway).home);
-      } catch(e) { /* skip bad line */ }
+      } catch(e) {}
     }
 
     if (homeProbs.length === 0) continue;
-
-    var avgHome = homeProbs.reduce(function(a, b) { return a + b; }, 0) / homeProbs.length;
+    var avg = homeProbs.reduce(function(a, b) { return a + b; }, 0) / homeProbs.length;
     result[game.id] = {
       homeTeam:     homeTeam,
       awayTeam:     awayTeam,
-      homeProb:     avgHome,
-      awayProb:     1 - avgHome,
+      homeProb:     avg,
+      awayProb:     1 - avg,
       booksUsed:    homeProbs.length,
       commenceTime: game.commence_time,
     };
   }
 
-  console.log("[odds] " + sport.toUpperCase() + ": " + Object.keys(result).length + " games");
+  console.log("[odds] " + sport.toUpperCase() + " parsed: " + Object.keys(result).length + " games");
   return result;
 }
 
 async function getSharpOddsMulti(apiKey, sports) {
   if (!apiKey) {
-    console.log("[odds] No ODDS_API_KEY  cannot fetch sharp lines");
+    console.log("[odds] No ODDS_API_KEY");
     return {};
   }
-
-  var promises = sports.map(function(sport) {
-    return getSharpOdds(apiKey, sport).catch(function() { return {}; });
-  });
-
-  var results = await Promise.all(promises);
-  var merged  = {};
-  results.forEach(function(r) { Object.assign(merged, r); });
-  console.log("[odds] Total games across all sports: " + Object.keys(merged).length);
+  var merged = {};
+  for (var i = 0; i < sports.length; i++) {
+    try {
+      var r = await getSharpOdds(apiKey, sports[i]);
+      Object.assign(merged, r);
+    } catch(err) {
+      console.log("[odds] " + sports[i] + " failed: " + err.message);
+    }
+  }
+  console.log("[odds] Total: " + Object.keys(merged).length + " games");
   return merged;
 }
 
