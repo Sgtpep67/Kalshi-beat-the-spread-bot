@@ -343,10 +343,10 @@ app.get("/api/debug/markets", async function(req, res) {
     var crypto = require("crypto");
     var BASE   = "https://api.elections.kalshi.com/trade-api/v2";
 
-    function makeDebugHeaders(method, endpoint) {
+    function makeDebugHeaders(endpoint) {
       var fullPath    = "/trade-api/v2" + endpoint.split("?")[0];
       var timestampMs = Date.now().toString();
-      var message     = timestampMs + method.toUpperCase() + fullPath;
+      var message     = timestampMs + "GET" + fullPath;
       var signer      = crypto.createSign("SHA256");
       signer.update(message);
       signer.end();
@@ -363,43 +363,46 @@ app.get("/api/debug/markets", async function(req, res) {
       };
     }
 
-    // Fetch events for known sports series
-    var sportsSeries = ["KXNBA", "KXNFL", "KXMLB", "KXNHL", "KXNCAAB", "KXNCAAF", "KXMMA", "KXNASCAR"];
-    var allEvents = [];
-    for (var i = 0; i < sportsSeries.length; i++) {
-      var series = sportsSeries[i];
-      try {
-        var ep = "/events?series_ticker=" + series + "&status=open&limit=20";
-        var r  = await axios.get(BASE + "/events", {
-          headers: makeDebugHeaders("GET", "/events"),
-          params:  { series_ticker: series, status: "open", limit: 20 },
-          timeout: 8000,
-        });
-        var events = r.data.events || [];
-        events.forEach(function(e) { e._series = series; });
-        allEvents = allEvents.concat(events);
-      } catch(e) { /* series not found, skip */ }
-    }
-
-    // Also fetch raw markets with no filter to see what else exists
-    var rawResp = await axios.get(BASE + "/markets", {
-      headers: makeDebugHeaders("GET", "/markets"),
-      params:  { status: "open", limit: 50 },
-      timeout: 8000,
+    // Fetch all series to find sports ones
+    var seriesResp = await axios.get(BASE + "/series", {
+      headers: makeDebugHeaders("/series"),
+      params:  { limit: 100 },
+      timeout: 10000,
     });
-    var rawMarkets = rawResp.data.markets || [];
-    var nonMVE = rawMarkets.filter(function(m) {
-      return m.ticker.indexOf("KXMVE") === -1;
+    var allSeries  = seriesResp.data.series || [];
+    var sportsSeries = allSeries.filter(function(s) {
+      var t = (s.ticker || "").toUpperCase();
+      var c = (s.category || "").toUpperCase();
+      return c === "SPORTS" || t.indexOf("NBA") > -1 || t.indexOf("NFL") > -1 ||
+             t.indexOf("MLB") > -1 || t.indexOf("NHL") > -1 || t.indexOf("NCAA") > -1 ||
+             t.indexOf("NCAAB") > -1 || t.indexOf("MMA") > -1;
+    });
+
+    // Also fetch events with status open and no series filter  get everything
+    var evResp = await axios.get(BASE + "/events", {
+      headers: makeDebugHeaders("/events"),
+      params:  { status: "open", limit: 50 },
+      timeout: 10000,
+    });
+    var allEvents = evResp.data.events || [];
+    var sportsEvents = allEvents.filter(function(e) {
+      var t = (e.event_ticker || "").toUpperCase();
+      var c = (e.category || "").toUpperCase();
+      var s = (e.series_ticker || "").toUpperCase();
+      return c === "SPORTS" || t.indexOf("NBA") > -1 || t.indexOf("NFL") > -1 ||
+             t.indexOf("MLB") > -1 || t.indexOf("NHL") > -1 || t.indexOf("NCAA") > -1 ||
+             s.indexOf("SPORTS") > -1;
     });
 
     res.json({
-      eventsFound:    allEvents.length,
-      eventSample:    allEvents.slice(0, 10).map(function(e) {
-        return { series: e._series, ticker: e.event_ticker, title: e.title };
+      totalSeries:      allSeries.length,
+      sportsSeries:     sportsSeries.map(function(s) { return { ticker: s.ticker, title: s.title, category: s.category }; }),
+      totalEvents:      allEvents.length,
+      sportsEvents:     sportsEvents.slice(0, 20).map(function(e) {
+        return { ticker: e.event_ticker, title: e.title, series: e.series_ticker, category: e.category };
       }),
-      nonMVEMarkets:  nonMVE.length,
-      nonMVESample:   nonMVE.slice(0, 20).map(function(m) {
-        return { ticker: m.ticker, title: m.title, event_ticker: m.event_ticker };
+      allEventSample:   allEvents.slice(0, 20).map(function(e) {
+        return { ticker: e.event_ticker, title: e.title, series: e.series_ticker, category: e.category };
       }),
     });
   } catch (err) {
