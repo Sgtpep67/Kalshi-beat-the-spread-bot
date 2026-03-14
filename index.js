@@ -342,35 +342,66 @@ app.get("/api/debug/markets", async function(req, res) {
     var axios  = require("axios");
     var crypto = require("crypto");
     var BASE   = "https://api.elections.kalshi.com/trade-api/v2";
-    var ts     = Date.now().toString();
-    var msg    = ts + "GET" + "/trade-api/v2/markets";
-    var signer = crypto.createSign("SHA256");
-    signer.update(msg);
-    signer.end();
-    var sig = signer.sign({
-      key:        CONFIG.KALSHI_PRIVATE_KEY,
-      padding:    crypto.constants.RSA_PKCS1_PSS_PADDING,
-      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
-    }, "base64");
-    var resp = await axios.get(BASE + "/markets", {
-      headers: {
+
+    function makeDebugHeaders(method, endpoint) {
+      var fullPath    = "/trade-api/v2" + endpoint.split("?")[0];
+      var timestampMs = Date.now().toString();
+      var message     = timestampMs + method.toUpperCase() + fullPath;
+      var signer      = crypto.createSign("SHA256");
+      signer.update(message);
+      signer.end();
+      var sig = signer.sign({
+        key:        CONFIG.KALSHI_PRIVATE_KEY,
+        padding:    crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+      }, "base64");
+      return {
         "KALSHI-ACCESS-KEY":       CONFIG.KALSHI_API_KEY,
-        "KALSHI-ACCESS-TIMESTAMP": ts,
+        "KALSHI-ACCESS-TIMESTAMP": timestampMs,
         "KALSHI-ACCESS-SIGNATURE": sig,
         "Accept": "application/json",
-      },
-      params: { status: "open", limit: 100 },
-      timeout: 10000,
+      };
+    }
+
+    // Fetch events for known sports series
+    var sportsSeries = ["KXNBA", "KXNFL", "KXMLB", "KXNHL", "KXNCAAB", "KXNCAAF", "KXMMA", "KXNASCAR"];
+    var allEvents = [];
+    for (var i = 0; i < sportsSeries.length; i++) {
+      var series = sportsSeries[i];
+      try {
+        var ep = "/events?series_ticker=" + series + "&status=open&limit=20";
+        var r  = await axios.get(BASE + "/events", {
+          headers: makeDebugHeaders("GET", "/events"),
+          params:  { series_ticker: series, status: "open", limit: 20 },
+          timeout: 8000,
+        });
+        var events = r.data.events || [];
+        events.forEach(function(e) { e._series = series; });
+        allEvents = allEvents.concat(events);
+      } catch(e) { /* series not found, skip */ }
+    }
+
+    // Also fetch raw markets with no filter to see what else exists
+    var rawResp = await axios.get(BASE + "/markets", {
+      headers: makeDebugHeaders("GET", "/markets"),
+      params:  { status: "open", limit: 50 },
+      timeout: 8000,
     });
-    var all     = resp.data.markets || [];
-    var tickers = all.map(function(m) { return m.ticker; });
-    var sports  = tickers.filter(function(t) {
-      var u = t.toUpperCase();
-      return u.indexOf("NBA") > -1 || u.indexOf("NFL") > -1 ||
-             u.indexOf("MLB") > -1 || u.indexOf("NHL") > -1 ||
-             u.indexOf("NCAA") > -1 || u.startsWith("KX");
+    var rawMarkets = rawResp.data.markets || [];
+    var nonMVE = rawMarkets.filter(function(m) {
+      return m.ticker.indexOf("KXMVE") === -1;
     });
-    res.json({ total: all.length, sportsTickers: sports, sampleAll: tickers.slice(0, 50) });
+
+    res.json({
+      eventsFound:    allEvents.length,
+      eventSample:    allEvents.slice(0, 10).map(function(e) {
+        return { series: e._series, ticker: e.event_ticker, title: e.title };
+      }),
+      nonMVEMarkets:  nonMVE.length,
+      nonMVESample:   nonMVE.slice(0, 20).map(function(m) {
+        return { ticker: m.ticker, title: m.title, event_ticker: m.event_ticker };
+      }),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message, status: err.response ? err.response.status : null });
   }
