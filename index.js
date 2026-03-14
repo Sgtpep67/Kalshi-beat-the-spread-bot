@@ -2,7 +2,8 @@ require("dotenv").config();
 const express = require("express");
 const path    = require("path");
 const { getKalshiMarkets, placeBet, getBalance } = require("./kalshi");
-const { getSharpOdds } = require("./odds");
+var oddsModule = require("./odds");
+var getSharpOddsMulti = oddsModule.getSharpOddsMulti;
 const { eloToWinProb, getElo } = require("./elo");
 
 const app = express();
@@ -113,7 +114,7 @@ async function scan() {
     const markets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
     pushLog("[kalshi] " + markets.length + " sports markets fetched");
 
-    const odds      = await getSharpOdds(CONFIG.ODDS_API_KEY);
+    var odds = await getSharpOddsMulti(CONFIG.ODDS_API_KEY, ["nba","nfl","mlb","nhl","ncaab","ncaaf"]);
     const oddsCount = Object.keys(odds).length;
     pushLog("[odds] " + oddsCount + " games with sharp lines fetched");
 
