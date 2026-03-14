@@ -6,20 +6,26 @@ var BASE_URL = "https://api.elections.kalshi.com/trade-api/v2";
 // Individual game series tickers on Kalshi
 // These are the series that have actual game-by-game markets
 var GAME_SERIES = [
-  "KXNBAGAME",       // NBA game winner
-  "KXNFLGAME",       // NFL game winner
-  "KXMLBGAME",       // MLB game winner
-  "KXNHLGAME",       // NHL game winner
-  "KXNCAABGAME",     // College basketball game
-  "KXNCAAMB1HWINNER",// College basketball 1H winner
-  "KXNCAAMBGAME",    // Men's college basketball game
-  "KXNCAAFGAME",     // College football game
-  "KXNCAAFD3GAME",   // College football D3 game
-  "KXWNBAGAME",      // WNBA game winner
-  "KXNBASERIES",     // NBA series winner
-  "KXNHLSERIES",     // NHL series winner
-  "KXMLBSERIES",     // MLB series winner
-  "KXWNBASERIES",    // WNBA series winner
+  "KXNBAGAME",        // NBA game winner
+  "KXNFLGAME",        // NFL game winner
+  "KXMLBGAME",        // MLB game winner
+  "KXNHLGAME",        // NHL game winner
+  "KXNCAAMBGAME",     // Men's college basketball game
+  "KXNCAABGAME",      // College basketball game
+  "KXNCAAMB1HWINNER", // College basketball 1H winner
+  "KXNCAAFGAME",      // College football game
+  "KXNCAAFD3GAME",    // College football FCS/D3 game
+  "KXNCAAFCSGAME",    // College football FCS game
+  "KXNCAABBGAME",     // College baseball game
+  "KXNCAAHOCKEYGAME", // College hockey game
+  "KXNCAALAXGAME",    // College lacrosse game
+  "KXNCAAMLAXGAME",   // Men's college lacrosse game
+  "KXNCAAWBGAME",     // Women's college basketball game
+  "KXWNBAGAME",       // WNBA game winner
+  "KXNBASERIES",      // NBA series winner
+  "KXNHLSERIES",      // NHL series winner
+  "KXMLBSERIES",      // MLB series winner
+  "KXWNBASERIES",     // WNBA series winner
 ];
 
 function makeHeaders(method, endpoint, apiKeyId, privateKey) {
@@ -71,12 +77,15 @@ function extractTeams(title) {
 function getSportFromSeries(seriesTicker) {
   if (!seriesTicker) return "unknown";
   var t = seriesTicker.toUpperCase();
-  if (t.indexOf("NBA") > -1 || t.indexOf("WNBA") > -1) return "nba";
+  if (t.indexOf("WNBA") > -1) return "wnba";
+  if (t.indexOf("NBA") > -1) return "nba";
   if (t.indexOf("NFL") > -1) return "nfl";
+  if (t.indexOf("NCAABB") > -1) return "ncaabb";
+  if (t.indexOf("NCAAF") > -1) return "ncaaf";
+  if (t.indexOf("NCAAH") > -1 || t.indexOf("HOCKEY") > -1) return "ncaah";
+  if (t.indexOf("NCAAB") > -1 || t.indexOf("NCAAMB") > -1 || t.indexOf("NCAAWB") > -1) return "ncaab";
   if (t.indexOf("MLB") > -1) return "mlb";
   if (t.indexOf("NHL") > -1) return "nhl";
-  if (t.indexOf("NCAAF") > -1) return "ncaaf";
-  if (t.indexOf("NCAAB") > -1 || t.indexOf("NCAAMB") > -1 || t.indexOf("NCAAWB") > -1) return "ncaab";
   return "sports";
 }
 
