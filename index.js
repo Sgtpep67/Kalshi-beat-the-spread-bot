@@ -302,7 +302,7 @@ app.get("/api/signtest", async function(req, res) {
       padding:    crypto.constants.RSA_PKCS1_PSS_PADDING,
       saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
     }, "base64");
-    var resp = await axios.get("https://trading-api.kalshi.com/trade-api/v2/portfolio/balance", {
+    var resp = await axios.get("https://api.elections.kalshi.com/trade-api/v2/portfolio/balance", {
       headers: {
         "KALSHI-ACCESS-KEY":       CONFIG.KALSHI_API_KEY,
         "KALSHI-ACCESS-TIMESTAMP": ts,
@@ -341,7 +341,7 @@ app.get("/api/debug/markets", async function(req, res) {
   try {
     const axios  = require("axios");
     const crypto = require("crypto");
-    const BASE   = "https://trading-api.kalshi.com/trade-api/v2";
+    const BASE   = "https://api.elections.kalshi.com/trade-api/v2";
     const ts     = Date.now().toString();
     const sigPath = "/trade-api/v2/markets";
     const msg    = ts + "GET" + sigPath;
