@@ -105,7 +105,7 @@ async function scan() {
     }
 
     for (const market of markets) {
-      const { gameId, homeTeam, awayTeam, homeProb: kalshiHomeProb,
+      const { gameId, homeTeam, awayTeam, kalshiProb: kalshiHomeProb,
               openInterest, hoursUntilGame } = market;
 
       // ── FILTER: liquidity gate
@@ -268,7 +268,7 @@ app.get("/api/debug/markets", async (req, res) => {
     const BASE_URL = "https://trading-api.kalshi.com/trade-api/v2";
 
     const ts  = Date.now().toString();
-    const msg = `${ts}GET/markets`;
+    const msg = `${ts}GET/trade-api/v2/markets`;
     const sig = crypto.createSign("RSA-SHA256");
     sig.update(msg);
     const signature = sig.sign({
