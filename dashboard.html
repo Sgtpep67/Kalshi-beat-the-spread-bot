@@ -49,9 +49,15 @@ const Vault = {
 // ── SEED DATA (shown before first API poll) ────────────────────────────────────
 const BANKROLL_INIT = 2500;
 const SPORTS_CONFIG = [
-  { id:"nba",label:"NBA",icon:"🏀" },{ id:"nfl",label:"NFL",icon:"🏈" },
-  { id:"mlb",label:"MLB",icon:"⚾" },{ id:"nhl",label:"NHL",icon:"🏒" },
-  { id:"ncaab",label:"NCAAB",icon:"🎓" },{ id:"ncaaf",label:"NCAAF",icon:"🏟" },
+  { id:"nba",   label:"NBA",          icon:"" },
+  { id:"nfl",   label:"NFL",          icon:"" },
+  { id:"mlb",   label:"MLB",          icon:"" },
+  { id:"nhl",   label:"NHL",          icon:"" },
+  { id:"ncaab", label:"NCAA Bball",   icon:"" },
+  { id:"ncaaf", label:"NCAA Fball",   icon:"" },
+  { id:"ncaabb",label:"NCAA Baseball",icon:"" },
+  { id:"ncaah", label:"NCAA Hockey",  icon:"" },
+  { id:"wnba",  label:"WNBA",         icon:"" },
 ];
 const EVENT_TYPES = [
   { id:"ml",label:"Moneyline",desc:"Win/lose outright" },
@@ -287,7 +293,7 @@ function App() {
   const sPnl = id => BETS.filter(b=>b.sport===id).reduce((s,b)=>s+b.pnl,0);
   const sWR  = id => { const sb=BETS.filter(b=>b.sport===id); return sb.length?Math.round(sb.filter(b=>b.status==="WON").length/sb.length*100):0; };
   const sCum = id => BETS.filter(b=>b.sport===id).reduce((a,b)=>{ a.push((a.at(-1)??0)+b.pnl); return a; },[0]);
-  const [sportOn, setSportOn] = useState({ nba:true, nfl:true, mlb:true, nhl:true, ncaab:false, ncaaf:false });
+  const [sportOn, setSportOn] = useState({ nba:true, nfl:true, mlb:true, nhl:true, ncaab:true, ncaaf:false, ncaabb:false, ncaah:false, wnba:false });
   const [eventOn, setEventOn] = useState({ ml:true, spread:false, total:false, props:false });
 
   const TABS = [
