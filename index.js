@@ -343,12 +343,12 @@ app.get("/api/debug/markets", async function(req, res) {
     var crypto = require("crypto");
     var BASE   = "https://api.elections.kalshi.com/trade-api/v2";
 
-    function makeDebugHeaders(endpoint) {
+    function sign(endpoint) {
       var fullPath    = "/trade-api/v2" + endpoint.split("?")[0];
-      var timestampMs = Date.now().toString();
-      var message     = timestampMs + "GET" + fullPath;
+      var ts          = Date.now().toString();
+      var msg         = ts + "GET" + fullPath;
       var signer      = crypto.createSign("SHA256");
-      signer.update(message);
+      signer.update(msg);
       signer.end();
       var sig = signer.sign({
         key:        CONFIG.KALSHI_PRIVATE_KEY,
@@ -357,56 +357,51 @@ app.get("/api/debug/markets", async function(req, res) {
       }, "base64");
       return {
         "KALSHI-ACCESS-KEY":       CONFIG.KALSHI_API_KEY,
-        "KALSHI-ACCESS-TIMESTAMP": timestampMs,
+        "KALSHI-ACCESS-TIMESTAMP": ts,
         "KALSHI-ACCESS-SIGNATURE": sig,
         "Accept": "application/json",
       };
     }
 
-    // Fetch all series to find sports ones
-    var seriesResp = await axios.get(BASE + "/series", {
-      headers: makeDebugHeaders("/series"),
-      params:  { limit: 100 },
-      timeout: 10000,
-    });
-    var allSeries  = seriesResp.data.series || [];
-    var sportsSeries = allSeries.filter(function(s) {
-      var t = (s.ticker || "").toUpperCase();
-      var c = (s.category || "").toUpperCase();
-      return c === "SPORTS" || t.indexOf("NBA") > -1 || t.indexOf("NFL") > -1 ||
-             t.indexOf("MLB") > -1 || t.indexOf("NHL") > -1 || t.indexOf("NCAA") > -1 ||
-             t.indexOf("NCAAB") > -1 || t.indexOf("MMA") > -1;
-    });
+    var results = {};
 
-    // Also fetch events with status open and no series filter  get everything
-    var evResp = await axios.get(BASE + "/events", {
-      headers: makeDebugHeaders("/events"),
-      params:  { status: "open", limit: 50 },
-      timeout: 10000,
-    });
-    var allEvents = evResp.data.events || [];
-    var sportsEvents = allEvents.filter(function(e) {
-      var t = (e.event_ticker || "").toUpperCase();
-      var c = (e.category || "").toUpperCase();
-      var s = (e.series_ticker || "").toUpperCase();
-      return c === "SPORTS" || t.indexOf("NBA") > -1 || t.indexOf("NFL") > -1 ||
-             t.indexOf("MLB") > -1 || t.indexOf("NHL") > -1 || t.indexOf("NCAA") > -1 ||
-             s.indexOf("SPORTS") > -1;
-    });
+    // Test each game series directly
+    var series = ["KXNBAGAME", "KXNFLGAME", "KXMLBGAME", "KXNHLGAME", "KXNCAABGAME", "KXNCAAMB1HWINNER", "KXNCAAMBGAME", "KXNCAAFGAME", "KXWNBAGAME"];
+    for (var i = 0; i < series.length; i++) {
+      var s = series[i];
+      try {
+        var r = await axios.get(BASE + "/markets", {
+          headers: sign("/markets"),
+          params:  { status: "open", limit: 5, series_ticker: s },
+          timeout: 8000,
+        });
+        var markets = r.data.markets || [];
+        results[s] = {
+          count: markets.length,
+          sample: markets.slice(0, 2).map(function(m) {
+            return { ticker: m.ticker, title: m.title, status: m.status, close_time: m.close_time };
+          }),
+        };
+      } catch(err) {
+        results[s] = { error: err.message, status: err.response ? err.response.status : null };
+      }
+    }
 
-    res.json({
-      totalSeries:      allSeries.length,
-      sportsSeries:     sportsSeries.map(function(s) { return { ticker: s.ticker, title: s.title, category: s.category }; }),
-      totalEvents:      allEvents.length,
-      sportsEvents:     sportsEvents.slice(0, 20).map(function(e) {
-        return { ticker: e.event_ticker, title: e.title, series: e.series_ticker, category: e.category };
-      }),
-      allEventSample:   allEvents.slice(0, 20).map(function(e) {
-        return { ticker: e.event_ticker, title: e.title, series: e.series_ticker, category: e.category };
-      }),
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message, status: err.response ? err.response.status : null });
+    // Also try fetching by event_ticker to see if there is another structure
+    try {
+      var r2 = await axios.get(BASE + "/events", {
+        headers: sign("/events"),
+        params:  { series_ticker: "KXNBAGAME", status: "open", limit: 5 },
+        timeout: 8000,
+      });
+      results["KXNBAGAME_events"] = r2.data;
+    } catch(err) {
+      results["KXNBAGAME_events"] = { error: err.message };
+    }
+
+    res.json(results);
+  } catch(err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
