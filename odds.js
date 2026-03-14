@@ -5,12 +5,16 @@ var BASE_URL = "https://api.the-odds-api.com/v4";
 var TARGET_BOOKS = ["pinnacle", "draftkings", "fanduel", "betmgm"];
 
 var SPORT_MAP = {
-  nba:   "basketball_nba",
-  nfl:   "americanfootball_nfl",
-  mlb:   "baseball_mlb",
-  nhl:   "icehockey_nhl",
-  ncaab: "basketball_ncaab",
-  ncaaf: "americanfootball_ncaaf",
+  nba:      "basketball_nba",
+  nfl:      "americanfootball_nfl",
+  mlb:      "baseball_mlb",
+  nhl:      "icehockey_nhl",
+  ncaab:    "basketball_ncaab",
+  ncaaf:    "americanfootball_ncaaf",
+  ncaabb:   "baseball_ncaa",
+  ncaah:    "icehockey_college_hockey",
+  wnba:     "basketball_wnba",
+  mls:      "soccer_usa_mls",
 };
 
 function americanToDecimal(american) {
