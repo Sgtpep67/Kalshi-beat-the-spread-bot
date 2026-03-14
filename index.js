@@ -339,37 +339,38 @@ app.get("/api/keycheck", function(req, res) {
 
 app.get("/api/debug/markets", async function(req, res) {
   try {
-    const axios  = require("axios");
-    const crypto = require("crypto");
-    const BASE   = "https://api.elections.kalshi.com/trade-api/v2";
-    const ts     = Date.now().toString();
-    const sigPath = "/trade-api/v2/markets";
-    const msg    = ts + "GET" + sigPath;
-    const signer = crypto.createSign("RSA-SHA256");
+    var axios  = require("axios");
+    var crypto = require("crypto");
+    var BASE   = "https://api.elections.kalshi.com/trade-api/v2";
+    var ts     = Date.now().toString();
+    var msg    = ts + "GET" + "/trade-api/v2/markets";
+    var signer = crypto.createSign("SHA256");
     signer.update(msg);
     signer.end();
-    const sig = signer.sign({
+    var sig = signer.sign({
       key:        CONFIG.KALSHI_PRIVATE_KEY,
       padding:    crypto.constants.RSA_PKCS1_PSS_PADDING,
       saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
     }, "base64");
-    const resp = await axios.get(BASE + "/markets", {
+    var resp = await axios.get(BASE + "/markets", {
       headers: {
         "KALSHI-ACCESS-KEY":       CONFIG.KALSHI_API_KEY,
         "KALSHI-ACCESS-TIMESTAMP": ts,
         "KALSHI-ACCESS-SIGNATURE": sig,
         "Accept": "application/json",
       },
-      params: { status: "open", limit: 20 },
+      params: { status: "open", limit: 100 },
       timeout: 10000,
     });
-    const all = resp.data.markets || [];
-    res.json({
-      total: all.length,
-      sample: all.slice(0, 20).map(function(m) {
-        return { ticker: m.ticker, title: m.title, event_ticker: m.event_ticker, status: m.status };
-      }),
+    var all     = resp.data.markets || [];
+    var tickers = all.map(function(m) { return m.ticker; });
+    var sports  = tickers.filter(function(t) {
+      var u = t.toUpperCase();
+      return u.indexOf("NBA") > -1 || u.indexOf("NFL") > -1 ||
+             u.indexOf("MLB") > -1 || u.indexOf("NHL") > -1 ||
+             u.indexOf("NCAA") > -1 || u.startsWith("KX");
     });
+    res.json({ total: all.length, sportsTickers: sports, sampleAll: tickers.slice(0, 50) });
   } catch (err) {
     res.status(500).json({ error: err.message, status: err.response ? err.response.status : null });
   }
