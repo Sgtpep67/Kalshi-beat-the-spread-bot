@@ -82,7 +82,7 @@ function getSportFromSeries(seriesTicker) {
 
 function parseMarket(m, seriesTicker) {
   try {
-    if (m.status !== "open" && m.status !== "active") return null;
+    // accept open, active, or any tradeable status
     var price = parsePrice(m);
     if (price == null || price <= 0 || price >= 1) return null;
     var hoursUntilGame = m.close_time
@@ -111,7 +111,7 @@ async function fetchMarketsBySeries(seriesTicker, apiKeyId, privateKey) {
 
   do {
     var endpoint = "/markets";
-    var params   = { status: "active", limit: 100, series_ticker: seriesTicker };
+    var params   = { limit: 100, series_ticker: seriesTicker };
     if (cursor) params.cursor = cursor;
 
     try {
