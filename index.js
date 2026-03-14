@@ -114,7 +114,7 @@ async function scan() {
     const markets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
     pushLog("[kalshi] " + markets.length + " sports markets fetched");
 
-    var odds = await getSharpOddsMulti(CONFIG.ODDS_API_KEY, ["nba","nfl","mlb","nhl","ncaab","ncaaf"]);
+    var odds = await getSharpOddsMulti(CONFIG.ODDS_API_KEY, ["nba","nfl","mlb","nhl","ncaab","ncaaf","ncaabb","ncaah","wnba"]);
     const oddsCount = Object.keys(odds).length;
     pushLog("[odds] " + oddsCount + " games with sharp lines fetched");
 
