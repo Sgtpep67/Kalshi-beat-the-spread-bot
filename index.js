@@ -256,6 +256,71 @@ app.get("/api/balance", async function(req, res) {
   }
 });
 
+app.get("/api/signtest", async function(req, res) {
+  var crypto = require("crypto");
+  var key    = CONFIG.KALSHI_PRIVATE_KEY || "";
+  var lines  = key.split("\n");
+  var ts     = Date.now().toString();
+  var msg    = ts + "GET" + "/trade-api/v2/portfolio/balance";
+
+  // Report key structure
+  var report = {
+    keyLength:    key.length,
+    lineCount:    lines.length,
+    firstLine:    lines[0],
+    lastLine:     lines[lines.length - 1],
+    hasBegin:     key.indexOf("BEGIN RSA PRIVATE KEY") > -1,
+    hasEnd:       key.indexOf("END RSA PRIVATE KEY") > -1,
+    hasNewlines:  key.indexOf("\n") > -1,
+    signResult:   null,
+    signError:    null,
+  };
+
+  // Try to sign
+  try {
+    var signer = crypto.createSign("SHA256");
+    signer.update(msg);
+    signer.end();
+    var sig = signer.sign({
+      key:        key,
+      padding:    crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+    }, "base64");
+    report.signResult = "SUCCESS - sig length: " + sig.length;
+  } catch(err) {
+    report.signError = err.message;
+  }
+
+  // Now try actual Kalshi API call
+  try {
+    var axios = require("axios");
+    var signer2 = crypto.createSign("SHA256");
+    signer2.update(msg);
+    signer2.end();
+    var sig2 = signer2.sign({
+      key:        key,
+      padding:    crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+    }, "base64");
+    var resp = await axios.get("https://trading-api.kalshi.com/trade-api/v2/portfolio/balance", {
+      headers: {
+        "KALSHI-ACCESS-KEY":       CONFIG.KALSHI_API_KEY,
+        "KALSHI-ACCESS-TIMESTAMP": ts,
+        "KALSHI-ACCESS-SIGNATURE": sig2,
+        "Accept":                  "application/json",
+      },
+      timeout: 8000,
+    });
+    report.kalshiResult = resp.data;
+  } catch(err) {
+    report.kalshiError  = err.message;
+    report.kalshiStatus = err.response ? err.response.status : null;
+    report.kalshiBody   = err.response ? err.response.data   : null;
+  }
+
+  res.json(report);
+});
+
 app.get("/api/keycheck", function(req, res) {
   const key   = CONFIG.KALSHI_PRIVATE_KEY || "";
   const lines = key.split("\n");
