@@ -21,6 +21,7 @@ function makeHeaders(method, endpoint, apiKeyId, privateKey) {
   const fullPath    = "/trade-api/v2" + endpoint.split("?")[0];
   const timestampMs = Date.now().toString();
   const message     = `${timestampMs}${method.toUpperCase()}${fullPath}`;
+  console.log(`[kalshi] signing: method=${method} path=${fullPath} keyPresent=${!!privateKey} keyLen=${privateKey?.length}`);
 
   const signer = crypto.createSign("RSA-SHA256");
   signer.update(message);
