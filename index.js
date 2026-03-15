@@ -120,14 +120,15 @@ async function scan() {
     var markets = allMarkets.filter(function(m) {
       return !m.sport || state.enabledSports.indexOf(m.sport) > -1;
     });
-    pushLog("[kalshi] " + markets.length + " markets after sport filter (" + state.enabledSports.join(",") + ")");
-    pushLog("[kalshi] " + markets.length + " sports markets fetched");
+    pushLog("[kalshi] " + markets.length + " sports markets fetched (" + state.enabledSports.join(",") + ")");
 
     // Only re-fetch odds if cache is stale (older than 10 minutes)
     var now = Date.now();
     if (now - oddsCache.fetchedAt > ODDS_CACHE_TTL) {
       // Only fetch sports that have active Kalshi markets to save API calls
-      var activeSports = [...new Set(markets.map(function(m) { return m.sport; }).filter(Boolean))];
+      var sportSet = {};
+      markets.forEach(function(m) { if (m.sport) sportSet[m.sport] = true; });
+      var activeSports = Object.keys(sportSet);
       var validSports  = activeSports.filter(function(s) { return ["nba","nfl","mlb","nhl","ncaab","ncaaf","ncaabb","ncaah","wnba"].indexOf(s) > -1; });
       if (validSports.length > 0) {
         oddsCache.data      = await getSharpOddsMulti(CONFIG.ODDS_API_KEY, validSports);
