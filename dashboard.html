@@ -153,6 +153,39 @@ const RangeRow = ({ label, hint, value, min, max, step=1, onChange, fmt, color="
 );
 
 
+// ── APPLY CONFIG BUTTON
+function ApplyConfigButton({ maxBet, dailyLoss, maxConsec, kellyFrac, minEdge, maxConcurrent, minLiquidity, maxHoursToGame }) {
+  const [state, setState] = React.useState("idle"); // idle | saving | ok | err
+
+  const apply = async () => {
+    setState("saving");
+    try {
+      const res = await api("/api/config", "POST", {
+        MAX_BET_USD:       maxBet,
+        DAILY_LOSS_LIMIT:  dailyLoss,
+        MAX_CONSEC_LOSSES: maxConsec,
+        KELLY_FRACTION:    kellyFrac / 100,
+        MIN_EDGE_PCT:      minEdge,
+        MAX_CONCURRENT:    maxConcurrent,
+        MIN_LIQUIDITY:     minLiquidity,
+        MAX_HOURS_TO_GAME: maxHoursToGame,
+      });
+      setState(res.ok ? "ok" : "err");
+    } catch { setState("err"); }
+    setTimeout(() => setState("idle"), 2500);
+  };
+
+  const bg    = state==="ok" ? "rgba(0,229,160,.15)" : state==="err" ? "rgba(255,77,109,.15)" : "rgba(0,229,160,.08)";
+  const color = state==="ok" ? "#00e5a0"             : state==="err" ? "#ff4d6d"              : "#00e5a0";
+  const label = state==="saving" ? "APPLYING..." : state==="ok" ? "✓ APPLIED" : state==="err" ? "✗ ERROR" : "APPLY TO BOT";
+
+  return (
+    <button onClick={apply} disabled={state==="saving"} style={{background:bg,border:"1px solid "+color+"44",color,borderRadius:6,padding:"8px 24px",cursor:"pointer",fontSize:10,fontFamily:"inherit",fontWeight:700,letterSpacing:.5,transition:"all .2s"}}>
+      {label}
+    </button>
+  );
+}
+
 // ── SCAN BUTTON ────────────────────────────────────────────────────────────────
 function ScanButton({ enabledSports }) {
   const [scanning, setScanning] = React.useState(false);
@@ -235,6 +268,21 @@ function App() {
   const isGameLocked = (k) => betLockSet.has(`${k}-${today}`);
 
   // poll moved to derived section above
+
+  // Sync risk controls from live bot config on mount
+  useEffect(() => {
+    api("/api/config").then(function(cfg) {
+      if (!cfg) return;
+      if (cfg.MAX_BET_USD       != null) setMaxBet(cfg.MAX_BET_USD);
+      if (cfg.DAILY_LOSS_LIMIT  != null) setDailyLoss(cfg.DAILY_LOSS_LIMIT);
+      if (cfg.MAX_CONSEC_LOSSES != null) setMaxConsec(cfg.MAX_CONSEC_LOSSES);
+      if (cfg.KELLY_FRACTION    != null) setKellyFrac(Math.round(cfg.KELLY_FRACTION * 100));
+      if (cfg.MIN_EDGE_PCT      != null) setMinEdge(cfg.MIN_EDGE_PCT);
+      if (cfg.MAX_CONCURRENT    != null) setMaxConcurrent(cfg.MAX_CONCURRENT);
+      if (cfg.MIN_LIQUIDITY     != null) setMinLiquidity(cfg.MIN_LIQUIDITY);
+      if (cfg.MAX_HOURS_TO_GAME != null) setMaxHoursToGame(cfg.MAX_HOURS_TO_GAME);
+    }).catch(function() {});
+  }, []);
 
   useEffect(()=>{ if(logRef.current) logRef.current.scrollTop=9999; },[liveLog, localLog]);
 
@@ -564,6 +612,11 @@ function App() {
                 <div style={{marginTop:8,fontSize:9,color:"#88c0a0"}}>Locked today: <span style={{color:"#00e5a0"}}>{betLockSet.size}</span> game{betLockSet.size!==1?"s":""}</div>
               </div>
             </Card>
+
+            {/* APPLY BUTTON */}
+            <div style={{marginTop:16,display:"flex",justifyContent:"flex-end"}}>
+              <ApplyConfigButton maxBet={maxBet} dailyLoss={dailyLoss} maxConsec={maxConsec} kellyFrac={kellyFrac} minEdge={minEdge} maxConcurrent={maxConcurrent} minLiquidity={minLiquidity} maxHoursToGame={maxHoursToGame}/>
+            </div>
           </div>
         )}
 
