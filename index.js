@@ -94,8 +94,8 @@ async function refreshBalance() {
 
 //  FAIR VALUE ENGINE 
 function computeFairValue(homeTeam, awayTeam, sharpHomeProb, hoursUntilGame) {
-  const homeElo    = getElo(homeTeam);
-  const awayElo    = getElo(awayTeam);
+  const homeElo    = getElo(homeTeam || "");
+  const awayElo    = getElo(awayTeam || "");
   const eloProb    = eloToWinProb(homeElo, awayElo, 65);
   const sharpWeight = Math.min(0.85, 0.40 + 0.45 * Math.max(0, 1 - hoursUntilGame / 72));
   return eloProb * (1 - sharpWeight) + sharpHomeProb * sharpWeight;
@@ -204,6 +204,7 @@ async function scan() {
 
     for (const market of markets) {
       const { gameId, homeTeam, awayTeam, kalshiProb: kalshiHomeProb, openInterest, volume24h, hoursUntilGame } = market;
+      if (!homeTeam) continue; // skip markets with unparseable team names
 
       // Use 24h dollar volume as liquidity filter
       var liqValue = market.volume24h > 0 ? market.volume24h : market.openInterest;
