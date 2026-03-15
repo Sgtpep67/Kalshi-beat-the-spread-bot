@@ -251,6 +251,20 @@ app.get("/api/config", function(req, res) {
   res.json(CONFIG);
 });
 
+app.post("/api/config", function(req, res) {
+  var b = req.body || {};
+  if (b.MIN_EDGE_PCT      != null) CONFIG.MIN_EDGE_PCT      = parseFloat(b.MIN_EDGE_PCT);
+  if (b.MAX_BET_USD       != null) CONFIG.MAX_BET_USD       = parseFloat(b.MAX_BET_USD);
+  if (b.DAILY_LOSS_LIMIT  != null) CONFIG.DAILY_LOSS_LIMIT  = parseFloat(b.DAILY_LOSS_LIMIT);
+  if (b.MAX_CONSEC_LOSSES != null) CONFIG.MAX_CONSEC_LOSSES = parseInt(b.MAX_CONSEC_LOSSES);
+  if (b.MAX_CONCURRENT    != null) CONFIG.MAX_CONCURRENT    = parseInt(b.MAX_CONCURRENT);
+  if (b.MIN_LIQUIDITY     != null) CONFIG.MIN_LIQUIDITY     = parseFloat(b.MIN_LIQUIDITY);
+  if (b.MAX_HOURS_TO_GAME != null) CONFIG.MAX_HOURS_TO_GAME = parseFloat(b.MAX_HOURS_TO_GAME);
+  if (b.KELLY_FRACTION    != null) CONFIG.KELLY_FRACTION    = parseFloat(b.KELLY_FRACTION);
+  pushLog("Config updated: MAX_BET=" + CONFIG.MAX_BET_USD + " EDGE=" + CONFIG.MIN_EDGE_PCT + "% LIQ=" + CONFIG.MIN_LIQUIDITY + " HOURS=" + CONFIG.MAX_HOURS_TO_GAME);
+  res.json({ ok: true, config: CONFIG });
+});
+
 app.post("/api/start", async function(req, res) {
   if (state.inCooldown) return res.status(400).json({ error: "In cooldown - clear first" });
   if (req.body && req.body.sports && req.body.sports.length > 0) {
