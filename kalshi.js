@@ -152,7 +152,10 @@ async function fetchMarketsBySeries(seriesTicker, apiKeyId, privateKey) {
 
   do {
     var endpoint = "/markets";
-    var params   = { limit: 100, series_ticker: seriesTicker };
+    // Only fetch markets closing within next 7 days to avoid future-scheduled markets
+    var nowSec     = Math.floor(Date.now() / 1000);
+    var sevenDays  = nowSec + (7 * 24 * 3600);
+    var params     = { limit: 100, series_ticker: seriesTicker, min_close_ts: nowSec - 14400, max_close_ts: sevenDays };
     if (cursor) params.cursor = cursor;
 
     try {
