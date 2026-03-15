@@ -36,6 +36,7 @@ var ODDS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 let state = {
   running:           false,
+  enabledSports:     ["nba","nfl","mlb","nhl","ncaab"],
   inCooldown:        false,
   cooldownAt:        null,
   consecutiveLosses: 0,
@@ -115,7 +116,11 @@ async function scan() {
   }
 
   try {
-    const markets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+    var allMarkets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+    var markets = allMarkets.filter(function(m) {
+      return !m.sport || state.enabledSports.indexOf(m.sport) > -1;
+    });
+    pushLog("[kalshi] " + markets.length + " markets after sport filter (" + state.enabledSports.join(",") + ")");
     pushLog("[kalshi] " + markets.length + " sports markets fetched");
 
     // Only re-fetch odds if cache is stale (older than 10 minutes)
@@ -216,6 +221,9 @@ function handleResult(gameId, won) {
 //  API ENDPOINTS 
 app.post("/api/scan", async function(req, res) {
   pushLog("Manual scan triggered");
+  if (req.body && req.body.sports && req.body.sports.length > 0) {
+    state.enabledSports = req.body.sports;
+  }
   const wasStopped = !state.running;
   if (wasStopped) state.running = true;
   try {
@@ -240,6 +248,10 @@ app.get("/api/config", function(req, res) {
 
 app.post("/api/start", async function(req, res) {
   if (state.inCooldown) return res.status(400).json({ error: "In cooldown - clear first" });
+  if (req.body && req.body.sports && req.body.sports.length > 0) {
+    state.enabledSports = req.body.sports;
+    pushLog("Enabled sports: " + state.enabledSports.join(", "));
+  }
   state.running = true;
   pushLog("Bot STARTED - " + (CONFIG.PAPER_MODE ? "PAPER" : "LIVE"));
   await refreshBalance();
