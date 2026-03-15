@@ -154,7 +154,7 @@ const RangeRow = ({ label, hint, value, min, max, step=1, onChange, fmt, color="
 
 
 // ── SCAN BUTTON ────────────────────────────────────────────────────────────────
-function ScanButton() {
+function ScanButton({ enabledSports }) {
   const [scanning, setScanning] = React.useState(false);
   const [flash,    setFlash]    = React.useState(null); // "ok" | "err"
 
@@ -163,7 +163,8 @@ function ScanButton() {
     setScanning(true);
     setFlash(null);
     try {
-      const res = await api("/api/scan", "POST", { sports: getEnabledSports() });
+      const sports = enabledSports && enabledSports.length > 0 ? enabledSports : ["nba","nfl","mlb","nhl","ncaab"];
+      const res = await api("/api/scan", "POST", { sports: sports });
       setFlash(res.ok ? "ok" : "err");
     } catch {
       setFlash("err");
@@ -242,7 +243,7 @@ function App() {
   // ── BOT CONTROLS ──────────────────────────────────────────────────────────────
   const startBot = async () => {
     if (inCooldown) return;
-    await api("/api/start", "POST", { sports: getEnabledSports() });
+    await api("/api/start", "POST");
   };
   const stopBot = async () => {
     await api("/api/stop", "POST");
@@ -415,7 +416,7 @@ function App() {
                     <div>Max open <span style={{color:"#fff"}}>{maxConcurrent} bets</span></div>
                     <div>Max hrs to game <span style={{color:"#f5a623"}}>{maxHoursToGame}h</span></div>
                   </div>
-                  <div style={{marginTop:12}}><ScanButton/></div>
+                  <div style={{marginTop:12}}><ScanButton enabledSports={Object.keys(sportOn).filter(function(s){return sportOn[s];})}/></div>
                 </Card>
                 <Card>
                   <div style={{fontSize:8,color:"#8888aa",letterSpacing:1,marginBottom:8}}>DAILY LOSS METER</div>
@@ -716,7 +717,7 @@ function App() {
                   <span style={{color:inCooldown?"#f5a623":botOn?"#00e5a0":"#555570"}}>{inCooldown?"⏸ COOLDOWN":botOn?"● RUNNING":"○ IDLE"}</span>
                   {" "}&nbsp;·&nbsp; {displayLog.length} lines
                 </span>
-                <ScanButton/>
+                <ScanButton enabledSports={Object.keys(sportOn).filter(function(s){return sportOn[s];})}/>
               </div>
             </div>
             <div ref={logRef} style={{background:"#040407",border:"1px solid #0f0f18",borderRadius:10,padding:"14px 16px",height:520,overflowY:"auto"}}>
