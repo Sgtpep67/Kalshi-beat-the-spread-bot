@@ -164,6 +164,27 @@ async function scan() {
       pushLog("[odds] Using cached odds (" + Math.round((now - oddsCache.fetchedAt)/60000) + "m old)");
     }
     var odds = oddsCache.data;
+
+    // Enrich markets with exact game start time from odds API commence_time
+    // Match by team name to find the right odds entry
+    markets.forEach(function(market) {
+      if (!market.homeTeam) return;
+      var homeUpper = market.homeTeam.toUpperCase();
+      Object.values(odds).forEach(function(game) {
+        var oddsHome = (game.homeTeam || "").toUpperCase();
+        var oddsAway = (game.awayTeam || "").toUpperCase();
+        if ((oddsHome.indexOf(homeUpper) > -1 || homeUpper.indexOf(oddsHome) > -1 ||
+             oddsAway.indexOf(homeUpper) > -1 || homeUpper.indexOf(oddsAway) > -1) &&
+            game.commenceTime) {
+          var commenceMs = new Date(game.commenceTime).getTime();
+          var hoursToStart = (commenceMs - Date.now()) / 3600000;
+          if (hoursToStart > -2) {
+            market.hoursUntilGame = hoursToStart;
+            market.gameStartTime  = game.commenceTime;
+          }
+        }
+      });
+    });
     const oddsCount = Object.keys(odds).length;
     pushLog("[odds] " + oddsCount + " games with sharp lines fetched");
 
@@ -187,7 +208,7 @@ async function scan() {
       }
       if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME) {
         skipHours++;
-        if (loggedHours < 3) { pushLog("SKIP hours: " + (homeTeam||gameId) + " " + hoursUntilGame.toFixed(1) + "h > " + CONFIG.MAX_HOURS_TO_GAME + "h"); loggedHours++; }
+        if (loggedHours < 3) { var st = market.gameStartTime ? new Date(market.gameStartTime).toLocaleString() : hoursUntilGame.toFixed(1)+"h"; pushLog("SKIP hours: " + (homeTeam||gameId) + " starts: " + st + " (" + hoursUntilGame.toFixed(1) + "h away)"); loggedHours++; }
         continue;
       }
       if (isGameLocked(gameId)) { skipLocked++; continue; }
@@ -212,7 +233,7 @@ async function scan() {
 
       lockGame(gameId);
       await refreshBalance();
-      state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || "unknown", stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb, closeTime: market.closeTime || null });
+      state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || "unknown", stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb, closeTime: market.gameStartTime || market.closeTime || null });
     }
     pushLog("[scan] Skipped: " + skipLiquidity + " low-liq, " + skipHours + " far-out, " + skipLocked + " locked, " + skipEdge + " low-edge. Signals: " + signalCount);
   } catch (err) {
