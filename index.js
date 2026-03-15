@@ -203,7 +203,7 @@ async function scan() {
 
       lockGame(gameId);
       await refreshBalance();
-      state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || "unknown", stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb });
+      state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || "unknown", stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb, closeTime: market.closeTime || null });
     }
     pushLog("[scan] Skipped: " + skipLiquidity + " low-liq, " + skipHours + " far-out, " + skipLocked + " locked, " + skipEdge + " low-edge. Signals: " + signalCount);
   } catch (err) {
