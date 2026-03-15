@@ -243,7 +243,7 @@ function App() {
   const [kellyFrac,      setKellyFrac]      = useState(25);
   const [minEdge,        setMinEdge]        = useState(5);
   const [maxConcurrent,  setMaxConcurrent]  = useState(3);
-  const [minLiquidity,   setMinLiquidity]   = useState(500);
+  const [minLiquidity,   setMinLiquidity]   = useState(25);
   const [maxHoursToGame, setMaxHoursToGame] = useState(4);
   const [betLockSet,     setBetLockSet]     = useState(new Set(["nba-celtics-bucks-"+new Date().toISOString().slice(0,10)]));
 
@@ -584,10 +584,10 @@ function App() {
               </div>
               <div style={{marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                  <span style={{fontSize:10,color:"#ccccdd"}}>Min Kalshi Liquidity ($)</span>
-                  <input type="number" min={0} max={10000} step={100} value={minLiquidity} onChange={e=>setMinLiquidity(Math.max(0,Number(e.target.value)))} style={{width:68,background:"#0a0a12",border:"1px solid #222230",color:"#4d9fff",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",textAlign:"center",fontWeight:700}}/>
+                  <span style={{fontSize:10,color:"#ccccdd"}}>Min 24h Volume ($) — filters thin markets</span>
+                  <input type="number" min={0} max={500} step={25} value={minLiquidity} onChange={e=>setMinLiquidity(Math.max(0,Number(e.target.value)))} style={{width:68,background:"#0a0a12",border:"1px solid #222230",color:"#4d9fff",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:"'DM Mono',monospace",outline:"none",textAlign:"center",fontWeight:700}}/>
                 </div>
-                <input type="range" min={0} max={10000} step={100} value={minLiquidity} onChange={e=>setMinLiquidity(Number(e.target.value))} style={{width:"100%",accentColor:"#4d9fff",cursor:"pointer",height:3}}/>
+                <input type="range" min={0} max={500} step={25} value={minLiquidity} onChange={e=>setMinLiquidity(Number(e.target.value))} style={{width:"100%",accentColor:"#4d9fff",cursor:"pointer",height:3}}/>
               </div>
               <div style={{marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
