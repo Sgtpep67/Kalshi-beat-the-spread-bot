@@ -351,6 +351,16 @@ function App() {
     await api("/api/trading-hours", "POST", { enabled: val });
   };
 
+  const closeBet = async (gameId) => {
+    setClosingBet(gameId);
+    try {
+      await api("/api/bet/close", "POST", { gameId });
+      // Remove from local state immediately
+      setOpenBets(function(prev) { return prev.filter(function(b) { return b.gameId !== gameId; }); });
+    } catch(e) { /* will resync on next poll */ }
+    setClosingBet(null);
+  };
+
   const [sportOn, setSportOn] = useState({ nba:true, nfl:true, mlb:true, nhl:true, ncaab:true, ncaaf:false, ncaabb:false, ncaah:false, wnba:false });
   const [eventOn, setEventOn] = useState({ ml:true, spread:false, total:false, props:false });
 
@@ -503,7 +513,7 @@ function App() {
             {/* OPEN BETS */}
             <Card>
               <SLabel accent="#f5a623">OPEN BETS — PENDING SETTLEMENT ({OPEN_BETS_DEMO.length}/{maxConcurrent})</SLabel>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px",gap:8,padding:"0 0 6px",borderBottom:"1px solid #141420",fontSize:8,color:"#8888aa",letterSpacing:1}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px 32px",gap:8,padding:"0 0 6px",borderBottom:"1px solid #141420",fontSize:8,color:"#8888aa",letterSpacing:1}}>
                 <span>MATCHUP</span><span>SPORT</span><span>STAKE</span><span>EDGE</span><span>FAIR</span><span>MKT</span><span>LIQUIDITY</span>
               </div>
               {OPEN_BETS_DEMO.length === 0 && (
@@ -512,7 +522,7 @@ function App() {
                 </div>
               )}
               {OPEN_BETS_DEMO.map(b=>(
-                <div key={b.gameId||b.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px",gap:8,padding:"9px 0",borderBottom:"1px solid #0e0e16",alignItems:"center"}}>
+                <div key={b.gameId||b.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px 32px",gap:8,padding:"9px 0",borderBottom:"1px solid #0e0e16",alignItems:"center"}}>
                   <div>
                     <span style={{fontSize:11,color:"#fff",fontWeight:700}}>{b.team}</span>
                     <span style={{fontSize:9,color:"#9999bb"}}> vs {b.opp||b.awayTeam}</span>
@@ -523,6 +533,12 @@ function App() {
                   <span style={{fontSize:11,color:"#00e5a0",fontFamily:"monospace"}}>{((b.fairP||b.fairProb||0)*100).toFixed(1)}¢</span>
                   <span style={{fontSize:11,color:"#aaaacc",fontFamily:"monospace"}}>{((b.mktP||b.marketProb||0)*100).toFixed(1)}¢</span>
                   <span style={{fontSize:11,fontFamily:"monospace",color:(b.liq||b.openInterest||0)<minLiquidity?"#ff4d6d":"#aaaacc"}}>${(b.liq||b.openInterest||0).toLocaleString()}</span>
+                  <button
+                    onClick={function(){closeBet(b.gameId);}}
+                    disabled={closingBet===b.gameId}
+                    title="Remove this bet"
+                    style={{background:"rgba(255,77,109,.12)",border:"1px solid rgba(255,77,109,.3)",color:"#ff4d6d",borderRadius:4,cursor:"pointer",fontSize:10,fontWeight:700,padding:"2px 6px",lineHeight:1,opacity:closingBet===b.gameId?0.5:1}}
+                  >{closingBet===b.gameId?"...":"X"}</button>
                 </div>
               ))}
               <div style={{display:"flex",gap:16,marginTop:10,fontSize:9,color:"#8888aa"}}>
