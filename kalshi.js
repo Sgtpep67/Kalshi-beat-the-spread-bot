@@ -116,8 +116,8 @@ function parseMarket(m, seriesTicker) {
     var tickerDate = parseGameDateFromTicker(m.ticker || "");
     var gameTime   = tickerDate ? tickerDate : (m.close_time ? new Date(m.close_time) : null);
     var hoursUntilGame = gameTime ? (gameTime - Date.now()) / 3600000 : 999;
-    // Allow games from up to 2 hours ago (in case of delay) to 999 hours future
-    if (hoursUntilGame < -2) return null;
+    // Allow games from up to 4 hours ago (catches in-progress games) to 999 hours future
+    if (hoursUntilGame < -4) return null;
     var teams = extractTeams(m.title || "");
     // volume_24h_fp = 24h dollar volume (best liquidity gauge  matches Kalshi UI)
     // open_interest_fp = contracts outstanding (not dollars)
