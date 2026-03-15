@@ -235,6 +235,28 @@ function ScanButton({ enabledSports }) {
   );
 }
 
+// ── ERROR BOUNDARY
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return React.createElement("div", {
+        style: { padding: 32, color: "#ff4d6d", fontFamily: "monospace", fontSize: 12 }
+      }, [
+        React.createElement("div", { key: "t", style: { fontSize: 14, fontWeight: 700, marginBottom: 8 } }, "Dashboard Error"),
+        React.createElement("div", { key: "m" }, this.state.error.message),
+        React.createElement("button", {
+          key: "r",
+          onClick: () => this.setState({ error: null }),
+          style: { marginTop: 16, padding: "6px 16px", background: "rgba(255,77,109,.15)", border: "1px solid #ff4d6d", color: "#ff4d6d", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" }
+        }, "Retry")
+      ]);
+    }
+    return this.props.children;
+  }
+}
+
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
 function App() {
   const [tab, setTab]       = useState("overview");
@@ -544,7 +566,7 @@ function App() {
                     <span style={{fontSize:9,color:"#9999bb"}}> vs {b.opp||b.awayTeam}</span>
                   </div>
                   <span style={{fontSize:9,color:"#aaaacc"}}>{(b.sport||"").toUpperCase()}</span>
-                  <span style={{fontSize:11,color:"#fff",fontFamily:"monospace"}}>${b.stake}</span>
+                  <span style={{fontSize:11,color:"#fff",fontFamily:"monospace"}}>${(b.stake||0).toFixed(2)}</span>
                   <span style={{fontSize:11,color:"#4d9fff",fontFamily:"monospace"}}>+{((b.edge||0)*100).toFixed(1)}%</span>
                   <span style={{fontSize:11,color:"#00e5a0",fontFamily:"monospace"}}>{((b.fairP||b.fairProb||0)*100).toFixed(1)}¢</span>
                   <span style={{fontSize:11,color:"#aaaacc",fontFamily:"monospace"}}>{((b.mktP||b.marketProb||0)*100).toFixed(1)}¢</span>
@@ -863,7 +885,7 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);
 </script>
 </body>
 </html>
