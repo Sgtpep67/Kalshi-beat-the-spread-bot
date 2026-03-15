@@ -565,6 +565,15 @@ function App() {
                   <div>
                     <span style={{fontSize:11,color:"#fff",fontWeight:700}}>{b.team}</span>
                     <span style={{fontSize:9,color:"#9999bb"}}> vs {b.opp||b.awayTeam}</span>
+                    {b.closeTime && (
+                      <div style={{fontSize:8,color:"#555570",marginTop:2}}>
+                        {(()=>{
+                          var d = new Date(b.closeTime);
+                          return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}) + " " +
+                                 d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true,timeZoneName:"short"});
+                        })()}
+                      </div>
+                    )}
                   </div>
                   <span style={{fontSize:9,color:"#aaaacc"}}>{(b.sport||"").toUpperCase()}</span>
                   <span style={{fontSize:11,color:"#fff",fontFamily:"monospace"}}>${(b.stake||0).toFixed(2)}</span>
