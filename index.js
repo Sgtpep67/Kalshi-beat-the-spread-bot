@@ -93,11 +93,15 @@ function computeFairValue(homeTeam, awayTeam, sharpHomeProb, hoursUntilGame) {
 }
 
 function kellySize(fairProb, marketProb) {
-  const b     = (1 / marketProb) - 1;
-  const q     = 1 - fairProb;
-  const kelly = (fairProb * b - q) / b;
-  const frac  = Math.max(0, kelly * CONFIG.KELLY_FRACTION);
-  return Math.min(CONFIG.MAX_BET_USD, frac * 2500);
+  const b        = (1 / marketProb) - 1;
+  const q        = 1 - fairProb;
+  const kelly    = (fairProb * b - q) / b;
+  const frac     = Math.max(0, kelly * CONFIG.KELLY_FRACTION);
+  // Live mode: size against real Kalshi balance. Paper mode: use $2500 simulation bankroll.
+  const bankroll = CONFIG.PAPER_MODE
+    ? 2500
+    : (state.kalshiBalance != null ? state.kalshiBalance : 2500);
+  return Math.min(CONFIG.MAX_BET_USD, frac * bankroll);
 }
 
 //  SCAN 
@@ -249,6 +253,18 @@ app.get("/api/state", function(req, res) {
 
 app.get("/api/config", function(req, res) {
   res.json(CONFIG);
+});
+
+app.post("/api/mode", function(req, res) {
+  var mode = req.body && req.body.mode;
+  if (mode === "live") {
+    CONFIG.PAPER_MODE = false;
+    pushLog("MODE: Switched to LIVE trading  real money at risk");
+  } else {
+    CONFIG.PAPER_MODE = true;
+    pushLog("MODE: Switched to PAPER trading  simulation only");
+  }
+  res.json({ ok: true, PAPER_MODE: CONFIG.PAPER_MODE });
 });
 
 app.post("/api/config", function(req, res) {
