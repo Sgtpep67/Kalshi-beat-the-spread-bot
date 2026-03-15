@@ -167,18 +167,24 @@ async function scan() {
 
     // Enrich markets with exact game start time from odds API commence_time
     // Match by team name to find the right odds entry
+    // Enrich markets with exact start time from odds API
     markets.forEach(function(market) {
-      if (!market.homeTeam) return;
-      var homeUpper = market.homeTeam.toUpperCase();
+      var home = market.homeTeam || "";
+      var away = market.awayTeam || "";
+      if (!home && !away) return;
+      var homeU = home.toUpperCase();
+      var awayU = away.toUpperCase();
       Object.values(odds).forEach(function(game) {
-        var oddsHome = (game.homeTeam || "").toUpperCase();
-        var oddsAway = (game.awayTeam || "").toUpperCase();
-        if ((oddsHome.indexOf(homeUpper) > -1 || homeUpper.indexOf(oddsHome) > -1 ||
-             oddsAway.indexOf(homeUpper) > -1 || homeUpper.indexOf(oddsAway) > -1) &&
-            game.commenceTime) {
-          var commenceMs = new Date(game.commenceTime).getTime();
-          var hoursToStart = (commenceMs - Date.now()) / 3600000;
-          if (hoursToStart > -2) {
+        var gh = (game.homeTeam || "").toUpperCase();
+        var ga = (game.awayTeam || "").toUpperCase();
+        if (!gh && !ga) return;
+        var match = (gh && homeU && (gh.indexOf(homeU) > -1 || homeU.indexOf(gh) > -1)) ||
+                    (ga && awayU && (ga.indexOf(awayU) > -1 || awayU.indexOf(ga) > -1)) ||
+                    (gh && awayU && (gh.indexOf(awayU) > -1 || awayU.indexOf(gh) > -1)) ||
+                    (ga && homeU && (ga.indexOf(homeU) > -1 || homeU.indexOf(ga) > -1));
+        if (match && game.commenceTime) {
+          var hoursToStart = (new Date(game.commenceTime) - Date.now()) / 3600000;
+          if (hoursToStart > -3) {
             market.hoursUntilGame = hoursToStart;
             market.gameStartTime  = game.commenceTime;
           }
@@ -206,7 +212,8 @@ async function scan() {
         if (loggedLiq < 3) { pushLog("SKIP liq: " + (homeTeam||gameId) + " vol24h=$" + liqValue.toFixed(0) + " < $" + CONFIG.MIN_LIQUIDITY); loggedLiq++; }
         continue;
       }
-      if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME) {
+      // Skip if game is too far in future OR more than 4h in the past
+      if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME || hoursUntilGame < -4) {
         skipHours++;
         if (loggedHours < 3) { var st = market.gameStartTime ? new Date(market.gameStartTime).toLocaleString() : hoursUntilGame.toFixed(1)+"h"; pushLog("SKIP hours: " + (homeTeam||gameId) + " starts: " + st + " (" + hoursUntilGame.toFixed(1) + "h away)"); loggedHours++; }
         continue;
