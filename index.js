@@ -59,16 +59,24 @@ function pushLog(msg) {
   console.log("[" + t + "] " + msg);
 }
 
+function getEventKey(gameId) {
+  // Strip team suffix to get game-level lock key
+  // KXNBAGAME-26MAR16LALHOU-LAL -> KXNBAGAME-26MAR16LALHOU
+  var parts = gameId.split("-");
+  if (parts.length > 1 && /^[A-Z0-9]{2,5}$/.test(parts[parts.length - 1])) {
+    return parts.slice(0, -1).join("-");
+  }
+  return gameId;
+}
 function isGameLocked(gameId) {
-  const today = new Date().toISOString().slice(0, 10);
-  return state.betLockSet.has(gameId + "-" + today);
+  var today = new Date().toISOString().slice(0, 10);
+  return state.betLockSet.has(getEventKey(gameId) + "-" + today);
 }
-
 function lockGame(gameId) {
-  const today = new Date().toISOString().slice(0, 10);
-  state.betLockSet.add(gameId + "-" + today);
+  var today = new Date().toISOString().slice(0, 10);
+  state.betLockSet.add(getEventKey(gameId) + "-" + today);
+  pushLog("[lock] Game locked: " + getEventKey(gameId));
 }
-
 async function refreshBalance() {
   if (!CONFIG.KALSHI_API_KEY || !CONFIG.KALSHI_PRIVATE_KEY) return;
   try {
