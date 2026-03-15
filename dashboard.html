@@ -271,7 +271,30 @@ function App() {
   const [todayLoss,  setTodayLoss]  = useState(88);
   const [consecL,    setConsecL]    = useState(1);
   const [openBets,   setOpenBets]   = useState([])
-  const [closingBet, setClosingBet] = useState(null);
+  const [closingBet,  setClosingBet]  = useState(null);
+  const [gameLocks,   setGameLocks]   = useState([]);
+  const [showLocks,   setShowLocks]   = useState(false);
+
+  const fetchLocks = async () => {
+    try {
+      var res = await api("/api/bet/locks");
+      if (res.ok) setGameLocks(res.locks || []);
+    } catch(e) {}
+  };
+
+  const unlockGame = async (key) => {
+    try {
+      await api("/api/bet/unlock", "POST", { key: key });
+      setGameLocks(function(prev) { return prev.filter(function(k) { return k !== key; }); });
+    } catch(e) {}
+  };
+
+  const unlockAll = async () => {
+    try {
+      await api("/api/bet/unlock-all", "POST");
+      setGameLocks([]);
+    } catch(e) {}
+  };
   const [liveLog,    setLiveLog]    = useState([]);
   const [connected,  setConnected]  = useState(false);
 
@@ -580,7 +603,7 @@ function App() {
                   <span style={{fontSize:11,color:"#4d9fff",fontFamily:"monospace"}}>+{((b.edge||0)*100).toFixed(1)}%</span>
                   <span style={{fontSize:11,color:"#00e5a0",fontFamily:"monospace"}}>{((b.fairP||b.fairProb||0)*100).toFixed(1)}¢</span>
                   <span style={{fontSize:11,color:"#aaaacc",fontFamily:"monospace"}}>{((b.mktP||b.marketProb||0)*100).toFixed(1)}¢</span>
-                  <span style={{fontSize:11,fontFamily:"monospace",color:(b.liq||b.openInterest||0)<minLiquidity?"#ff4d6d":"#aaaacc"}}>${(b.liq||b.openInterest||0).toLocaleString()}</span>
+                  <span style={{fontSize:11,fontFamily:"monospace",color:(b.volume24h||b.liq||b.openInterest||0)<minLiquidity?"#ff4d6d":"#aaaacc"}}>${(b.volume24h||b.liq||b.openInterest||0).toLocaleString()}</span>
                   <button
                     onClick={function(){closeBet(b.gameId);}}
                     disabled={closingBet===b.gameId}
@@ -590,7 +613,7 @@ function App() {
                 </div>
               ))}
               <div style={{display:"flex",gap:16,marginTop:10,fontSize:9,color:"#8888aa"}}>
-                <span>Total exposed: <span style={{color:"#f5a623"}}>${OPEN_BETS_DEMO.reduce((s,b)=>s+b.stake,0)}</span></span>
+                <span>Total exposed: <span style={{color:"#f5a623"}}>${OPEN_BETS_DEMO.reduce((s,b)=>s+(b.stake||0),0).toFixed(2)}</span></span>
                 <span>Slots: <span style={{color:OPEN_BETS_DEMO.length>=maxConcurrent?"#ff4d6d":"#00e5a0"}}>{OPEN_BETS_DEMO.length}/{maxConcurrent}</span></span>
               </div>
             </Card>
@@ -706,6 +729,34 @@ function App() {
                   Running 24 hours (no time restriction)
                 </div>
               )}
+            </Card>
+
+            {/* LOCKED GAMES */}
+            <Card>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                <SLabel style={{marginBottom:0}}>LOCKED GAMES</SLabel>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={fetchLocks} style={{fontSize:9,padding:"3px 10px",background:"rgba(77,159,255,.1)",border:"1px solid rgba(77,159,255,.3)",color:"#4d9fff",borderRadius:4,cursor:"pointer",fontFamily:"inherit"}}>REFRESH</button>
+                  {gameLocks.length > 0 && <button onClick={unlockAll} style={{fontSize:9,padding:"3px 10px",background:"rgba(245,166,35,.1)",border:"1px solid rgba(245,166,35,.3)",color:"#f5a623",borderRadius:4,cursor:"pointer",fontFamily:"inherit"}}>CLEAR ALL</button>}
+                </div>
+              </div>
+              <div style={{fontSize:9,color:"#555570",marginBottom:8}}>Games locked from betting again today. Click X to unlock individually.</div>
+              {gameLocks.length === 0 && (
+                <div style={{fontSize:9,color:"#444455",fontStyle:"italic",padding:"8px 0"}}>No locked games — click REFRESH to load</div>
+              )}
+              {gameLocks.map(function(key) {
+                return React.createElement("div", {
+                  key: key,
+                  style: {display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0e0e16"}
+                }, [
+                  React.createElement("span", {key:"k", style:{fontSize:9,color:"#aaaacc",fontFamily:"monospace"}}, key),
+                  React.createElement("button", {
+                    key:"x",
+                    onClick: function() { unlockGame(key); },
+                    style: {background:"rgba(245,166,35,.12)",border:"1px solid rgba(245,166,35,.3)",color:"#f5a623",borderRadius:4,cursor:"pointer",fontSize:9,fontWeight:700,padding:"2px 6px"}
+                  }, "X")
+                ]);
+              })}
             </Card>
 
             {/* APPLY BUTTON */}
