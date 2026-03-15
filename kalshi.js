@@ -99,16 +99,28 @@ function parseMarket(m, seriesTicker) {
       : 999;
     if (hoursUntilGame < 0) return null;
     var teams = extractTeams(m.title || "");
+    // volume_24h_fp = 24h dollar volume (best liquidity gauge  matches Kalshi UI)
+    // open_interest_fp = contracts outstanding (not dollars)
+    // notional_value_dollars = dollar value of open interest
+    var vol24h    = m.volume_24h_fp      != null ? parseFloat(m.volume_24h_fp)      : 0;
+    var volTotal  = m.volume_fp          != null ? parseFloat(m.volume_fp)           : 0;
+    var notional  = m.notional_value_dollars != null ? parseFloat(m.notional_value_dollars) : 0;
+    var openInt   = m.open_interest_fp   != null ? parseFloat(m.open_interest_fp)
+                  : m.open_interest      != null ? m.open_interest : 0;
+
     return {
-      gameId:         m.ticker,
-      title:          m.title,
-      homeTeam:       teams.home,
-      awayTeam:       teams.away,
-      kalshiProb:     price,
-      openInterest:   m.open_interest != null ? m.open_interest : 0,
-      hoursUntilGame: hoursUntilGame,
-      closeTime:      m.close_time,
-      sport:          getSportFromSeries(seriesTicker || m.event_ticker),
+      gameId:          m.ticker,
+      title:           m.title,
+      homeTeam:        teams.home,
+      awayTeam:        teams.away,
+      kalshiProb:      price,
+      volume24h:       vol24h,     // 24h dollar volume  PRIMARY liquidity filter
+      volumeTotal:     volTotal,   // lifetime dollar volume
+      notionalValue:   notional,   // dollar value of open contracts
+      openInterest:    openInt,    // contracts outstanding (legacy)
+      hoursUntilGame:  hoursUntilGame,
+      closeTime:       m.close_time,
+      sport:           getSportFromSeries(seriesTicker || m.event_ticker),
     };
   } catch(e) { return null; }
 }
