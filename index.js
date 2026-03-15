@@ -241,7 +241,7 @@ async function scan() {
 
       lockGame(gameId);
       await refreshBalance();
-      state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || "unknown", stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb, closeTime: market.gameStartTime || market.closeTime || null });
+      state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || "unknown", stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb, closeTime: market.gameStartTime || market.closeTime || null, volume24h: market.volume24h || 0, openInterest: market.openInterest || 0 });
     }
     pushLog("[scan] Skipped: " + skipLiquidity + " low-liq, " + skipHours + " far-out, " + skipLocked + " locked, " + skipEdge + " low-edge. Signals: " + signalCount);
   } catch (err) {
@@ -374,6 +374,34 @@ app.post("/api/cooldown/clear", function(req, res) {
   state.running           = true;
   pushLog("COOLDOWN CLEARED - restarted");
   res.json({ ok: true });
+});
+
+app.get("/api/bet/locks", function(req, res) {
+  var today = new Date().toISOString().slice(0, 10);
+  var locks = [];
+  state.betLockSet.forEach(function(key) {
+    locks.push(key);
+  });
+  res.json({ ok: true, locks: locks, count: locks.length });
+});
+
+app.post("/api/bet/unlock", function(req, res) {
+  var key = req.body && req.body.key;
+  if (!key) return res.status(400).json({ error: "key required" });
+  if (state.betLockSet.has(key)) {
+    state.betLockSet.delete(key);
+    pushLog("[manual] Unlocked game: " + key);
+    res.json({ ok: true, unlocked: key });
+  } else {
+    res.status(404).json({ error: "Lock not found: " + key });
+  }
+});
+
+app.post("/api/bet/unlock-all", function(req, res) {
+  var count = state.betLockSet.size;
+  state.betLockSet.clear();
+  pushLog("[manual] Cleared all " + count + " game locks");
+  res.json({ ok: true, cleared: count });
 });
 
 app.post("/api/bet/close", function(req, res) {
