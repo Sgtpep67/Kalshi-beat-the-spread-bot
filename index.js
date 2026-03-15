@@ -173,14 +173,23 @@ async function scan() {
     }
 
     var skipLiquidity = 0, skipHours = 0, skipLocked = 0, skipEdge = 0, signalCount = 0;
+    var loggedLiq = 0, loggedHours = 0;
 
     for (const market of markets) {
       const { gameId, homeTeam, awayTeam, kalshiProb: kalshiHomeProb, openInterest, volume24h, hoursUntilGame } = market;
 
-      // Use 24h dollar volume as liquidity filter (matches Kalshi UI display)
+      // Use 24h dollar volume as liquidity filter
       var liqValue = market.volume24h > 0 ? market.volume24h : market.openInterest;
-      if (liqValue < CONFIG.MIN_LIQUIDITY) { skipLiquidity++; continue; }
-      if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME) { skipHours++; continue; }
+      if (liqValue < CONFIG.MIN_LIQUIDITY) {
+        skipLiquidity++;
+        if (loggedLiq < 3) { pushLog("SKIP liq: " + (homeTeam||gameId) + " vol24h=$" + liqValue.toFixed(0) + " < $" + CONFIG.MIN_LIQUIDITY); loggedLiq++; }
+        continue;
+      }
+      if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME) {
+        skipHours++;
+        if (loggedHours < 3) { pushLog("SKIP hours: " + (homeTeam||gameId) + " " + hoursUntilGame.toFixed(1) + "h > " + CONFIG.MAX_HOURS_TO_GAME + "h"); loggedHours++; }
+        continue;
+      }
       if (isGameLocked(gameId)) { skipLocked++; continue; }
       if (state.openBets.length >= CONFIG.MAX_CONCURRENT) break;
 
