@@ -20,7 +20,7 @@ const CONFIG = {
   DAILY_LOSS_LIMIT:  parseFloat(process.env.DAILY_LOSS_LIMIT  || "50"),
   MAX_CONSEC_LOSSES: parseInt(  process.env.MAX_CONSEC_LOSSES || "4"),
   MAX_CONCURRENT:    parseInt(  process.env.MAX_CONCURRENT    || "3"),
-  MIN_LIQUIDITY:     parseFloat(process.env.MIN_LIQUIDITY     || "500"),
+  MIN_LIQUIDITY:     parseFloat(process.env.MIN_LIQUIDITY     || "25"),
   MAX_HOURS_TO_GAME: parseFloat(process.env.MAX_HOURS_TO_GAME || "4"),
   KELLY_FRACTION:    parseFloat(process.env.KELLY_FRACTION    || "0.25"),
   ELO_WEIGHT:        parseFloat(process.env.ELO_WEIGHT        || "0.40"),
@@ -154,9 +154,11 @@ async function scan() {
     var skipLiquidity = 0, skipHours = 0, skipLocked = 0, skipEdge = 0, signalCount = 0;
 
     for (const market of markets) {
-      const { gameId, homeTeam, awayTeam, kalshiProb: kalshiHomeProb, openInterest, hoursUntilGame } = market;
+      const { gameId, homeTeam, awayTeam, kalshiProb: kalshiHomeProb, openInterest, volume24h, hoursUntilGame } = market;
 
-      if (openInterest < CONFIG.MIN_LIQUIDITY) { skipLiquidity++; continue; }
+      // Use 24h dollar volume as liquidity filter (matches Kalshi UI display)
+      var liqValue = market.volume24h > 0 ? market.volume24h : market.openInterest;
+      if (liqValue < CONFIG.MIN_LIQUIDITY) { skipLiquidity++; continue; }
       if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME) { skipHours++; continue; }
       if (isGameLocked(gameId)) { skipLocked++; continue; }
       if (state.openBets.length >= CONFIG.MAX_CONCURRENT) break;
@@ -385,6 +387,34 @@ app.get("/api/signtest", async function(req, res) {
   }
 
   res.json(report);
+});
+
+app.get("/api/liquidity", async function(req, res) {
+  try {
+    var allMarkets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+    var filtered   = allMarkets.filter(function(m) {
+      return state.enabledSports.indexOf(m.sport) > -1;
+    });
+    // Sort by open interest descending
+    filtered.sort(function(a, b) { return b.openInterest - a.openInterest; });
+    res.json({
+      total:      filtered.length,
+      minLiq:     CONFIG.MIN_LIQUIDITY,
+      passing:    filtered.filter(function(m) { return (m.volume24h > 0 ? m.volume24h : m.openInterest) >= CONFIG.MIN_LIQUIDITY; }).length,
+      distribution: {
+        "vol24h_0":      filtered.filter(function(m) { return m.volume24h === 0; }).length,
+        "vol24h_1-25":   filtered.filter(function(m) { return m.volume24h > 0   && m.volume24h < 25;   }).length,
+        "vol24h_25-100": filtered.filter(function(m) { return m.volume24h >= 25 && m.volume24h < 100;  }).length,
+        "vol24h_100-500":filtered.filter(function(m) { return m.volume24h >= 100 && m.volume24h < 500; }).length,
+        "vol24h_500+":   filtered.filter(function(m) { return m.volume24h >= 500; }).length,
+      },
+      top20: filtered.slice(0, 20).map(function(m) {
+        return { title: m.title, sport: m.sport, vol24h: m.volume24h, notional: m.notionalValue, openInterest: m.openInterest, hours: Math.round(m.hoursUntilGame * 10) / 10 };
+      }),
+    });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/keycheck", function(req, res) {
