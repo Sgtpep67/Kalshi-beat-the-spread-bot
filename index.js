@@ -147,19 +147,22 @@ async function scan() {
       return;
     }
 
+    var skipLiquidity = 0, skipHours = 0, skipLocked = 0, skipEdge = 0, signalCount = 0;
+
     for (const market of markets) {
       const { gameId, homeTeam, awayTeam, kalshiProb: kalshiHomeProb, openInterest, hoursUntilGame } = market;
 
-      if (openInterest < CONFIG.MIN_LIQUIDITY) continue;
-      if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME) continue;
-      if (isGameLocked(gameId)) continue;
+      if (openInterest < CONFIG.MIN_LIQUIDITY) { skipLiquidity++; continue; }
+      if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME) { skipHours++; continue; }
+      if (isGameLocked(gameId)) { skipLocked++; continue; }
       if (state.openBets.length >= CONFIG.MAX_CONCURRENT) break;
 
       const sharpHome = odds[gameId] ? odds[gameId].homeProb : kalshiHomeProb;
       const fairHome  = computeFairValue(homeTeam, awayTeam, sharpHome, hoursUntilGame);
       const edge      = fairHome - kalshiHomeProb;
 
-      if (edge * 100 < CONFIG.MIN_EDGE_PCT) continue;
+      if (edge * 100 < CONFIG.MIN_EDGE_PCT) { skipEdge++; continue; }
+      signalCount++;
 
       const stake = kellySize(fairHome, kalshiHomeProb);
       pushLog("SIGNAL " + homeTeam + " +" + (edge * 100).toFixed(1) + "% edge");
@@ -175,6 +178,7 @@ async function scan() {
       await refreshBalance();
       state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || "unknown", stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb });
     }
+    pushLog("[scan] Skipped: " + skipLiquidity + " low-liq, " + skipHours + " far-out, " + skipLocked + " locked, " + skipEdge + " low-edge. Signals: " + signalCount);
   } catch (err) {
     pushLog("ERROR in scan: " + err.message);
   }
