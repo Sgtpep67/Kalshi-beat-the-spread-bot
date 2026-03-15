@@ -436,6 +436,32 @@ app.get("/api/signtest", async function(req, res) {
   res.json(report);
 });
 
+app.get("/api/hours", async function(req, res) {
+  try {
+    var allMarkets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+    var filtered = allMarkets.filter(function(m) {
+      return state.enabledSports.indexOf(m.sport) > -1;
+    });
+    filtered.sort(function(a,b) { return a.hoursUntilGame - b.hoursUntilGame; });
+    res.json({
+      total: filtered.length,
+      maxHoursSetting: CONFIG.MAX_HOURS_TO_GAME,
+      passing: filtered.filter(function(m) { return m.hoursUntilGame <= CONFIG.MAX_HOURS_TO_GAME; }).length,
+      soonest: filtered.slice(0,10).map(function(m) {
+        return {
+          title: m.title,
+          sport: m.sport,
+          hoursUntilGame: Math.round(m.hoursUntilGame * 10) / 10,
+          volume24h: m.volume24h,
+          closeTime: m.closeTime,
+        };
+      }),
+    });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/liquidity", async function(req, res) {
   try {
     var allMarkets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
