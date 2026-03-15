@@ -37,6 +37,7 @@ var ODDS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 let state = {
   running:           false,
   enabledSports:     ["nba","nfl","mlb","nhl","ncaab"],
+  tradingHoursOnly:  false,   // if true, only scan 6AM-11:59PM MST
   inCooldown:        false,
   cooldownAt:        null,
   consecutiveLosses: 0,
@@ -107,6 +108,18 @@ function kellySize(fairProb, marketProb) {
 //  SCAN 
 async function scan() {
   if (!state.running || state.inCooldown) return;
+
+  // Trading hours check: 6:00AM - 11:59PM MST (UTC-7)
+  if (state.tradingHoursOnly) {
+    var now     = new Date();
+    var mstHour = (now.getUTCHours() - 7 + 24) % 24;
+    var mstMin  = now.getUTCMinutes();
+    var mstTime = mstHour + mstMin / 60;
+    if (mstTime < 6 || mstTime >= 24) {
+      pushLog("[hours] Outside trading window (6AM-11:59PM MST)  skipping scan. MST time: " + mstHour + ":" + (mstMin < 10 ? "0" : "") + mstMin);
+      return;
+    }
+  }
   await refreshBalance();
 
   if (state.todayLoss >= CONFIG.DAILY_LOSS_LIMIT) {
@@ -257,6 +270,13 @@ app.get("/api/config", function(req, res) {
   res.json(CONFIG);
 });
 
+app.post("/api/trading-hours", function(req, res) {
+  var enabled = req.body && req.body.enabled;
+  state.tradingHoursOnly = !!enabled;
+  pushLog("Trading hours " + (state.tradingHoursOnly ? "ON  6AM-11:59PM MST only" : "OFF  running 24 hours"));
+  res.json({ ok: true, tradingHoursOnly: state.tradingHoursOnly });
+});
+
 app.post("/api/mode", function(req, res) {
   var mode = req.body && req.body.mode;
   if (mode === "live") {
@@ -279,7 +299,7 @@ app.post("/api/config", function(req, res) {
   if (b.MIN_LIQUIDITY     != null) CONFIG.MIN_LIQUIDITY     = parseFloat(b.MIN_LIQUIDITY);
   if (b.MAX_HOURS_TO_GAME != null) CONFIG.MAX_HOURS_TO_GAME = parseFloat(b.MAX_HOURS_TO_GAME);
   if (b.KELLY_FRACTION    != null) CONFIG.KELLY_FRACTION    = parseFloat(b.KELLY_FRACTION);
-  pushLog("Config updated: MAX_BET=" + CONFIG.MAX_BET_USD + " EDGE=" + CONFIG.MIN_EDGE_PCT + "% LIQ=" + CONFIG.MIN_LIQUIDITY + " HOURS=" + CONFIG.MAX_HOURS_TO_GAME);
+  pushLog("Config updated: MAX_BET=$" + CONFIG.MAX_BET_USD + " EDGE=" + CONFIG.MIN_EDGE_PCT + "% KELLY=" + Math.round(CONFIG.KELLY_FRACTION*100) + "% CONCURRENT=" + CONFIG.MAX_CONCURRENT + " LIQ=$" + CONFIG.MIN_LIQUIDITY + " HOURS=" + CONFIG.MAX_HOURS_TO_GAME + " CONSEC=" + CONFIG.MAX_CONSEC_LOSSES);
   res.json({ ok: true, config: CONFIG });
 });
 
