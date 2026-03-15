@@ -30,6 +30,10 @@ const CONFIG = {
 };
 
 //  STATE 
+// Cache odds for 10 minutes to avoid burning API calls
+var oddsCache = { data: {}, fetchedAt: 0 };
+var ODDS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 let state = {
   running:           false,
   inCooldown:        false,
@@ -114,7 +118,21 @@ async function scan() {
     const markets = await getKalshiMarkets(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
     pushLog("[kalshi] " + markets.length + " sports markets fetched");
 
-    var odds = await getSharpOddsMulti(CONFIG.ODDS_API_KEY, ["nba","nfl","mlb","nhl","ncaab","ncaaf","ncaabb","ncaah","wnba"]);
+    // Only re-fetch odds if cache is stale (older than 10 minutes)
+    var now = Date.now();
+    if (now - oddsCache.fetchedAt > ODDS_CACHE_TTL) {
+      // Only fetch sports that have active Kalshi markets to save API calls
+      var activeSports = [...new Set(markets.map(function(m) { return m.sport; }).filter(Boolean))];
+      var validSports  = activeSports.filter(function(s) { return ["nba","nfl","mlb","nhl","ncaab","ncaaf","ncaabb","ncaah","wnba"].indexOf(s) > -1; });
+      if (validSports.length > 0) {
+        oddsCache.data      = await getSharpOddsMulti(CONFIG.ODDS_API_KEY, validSports);
+        oddsCache.fetchedAt = Date.now();
+        pushLog("[odds] Cache refreshed for: " + validSports.join(", "));
+      }
+    } else {
+      pushLog("[odds] Using cached odds (" + Math.round((now - oddsCache.fetchedAt)/60000) + "m old)");
+    }
+    var odds = oddsCache.data;
     const oddsCount = Object.keys(odds).length;
     pushLog("[odds] " + oddsCount + " games with sharp lines fetched");
 
