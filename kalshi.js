@@ -65,6 +65,24 @@ function parsePrice(market) {
   return null;
 }
 
+var MONTH_MAP = {
+  JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5,
+  JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11
+};
+
+function parseGameDateFromTicker(ticker) {
+  // e.g. KXNBAGAME-26MAR16LALHOU-LAL -> extract 26MAR16
+  var m = ticker.match(/-(\d{2})([A-Z]{3})(\d{2})/);
+  if (!m) return null;
+  var year  = 2000 + parseInt(m[1]);
+  var month = MONTH_MAP[m[2]];
+  var day   = parseInt(m[3]);
+  if (month == null || isNaN(day)) return null;
+  // Game time unknown from ticker - assume noon UTC as conservative estimate
+  var d = new Date(Date.UTC(year, month, day, 18, 0, 0)); // 18:00 UTC = ~noon MST
+  return d;
+}
+
 function extractTeams(title) {
   if (!title) return { home: null, away: null };
   var vs = title.match(/^(.+?)\s+vs\.?\s+(.+?)(?:\s*[-\-(]|$)/i);
@@ -94,10 +112,12 @@ function parseMarket(m, seriesTicker) {
     // accept open, active, or any tradeable status
     var price = parsePrice(m);
     if (price == null || price <= 0 || price >= 1) return null;
-    var hoursUntilGame = m.close_time
-      ? (new Date(m.close_time) - Date.now()) / 3600000
-      : 999;
-    if (hoursUntilGame < 0) return null;
+    // Parse game date from ticker (more accurate than close_time which Kalshi sets to month-end)
+    var tickerDate = parseGameDateFromTicker(m.ticker || "");
+    var gameTime   = tickerDate ? tickerDate : (m.close_time ? new Date(m.close_time) : null);
+    var hoursUntilGame = gameTime ? (gameTime - Date.now()) / 3600000 : 999;
+    // Allow games from up to 2 hours ago (in case of delay) to 999 hours future
+    if (hoursUntilGame < -2) return null;
     var teams = extractTeams(m.title || "");
     // volume_24h_fp = 24h dollar volume (best liquidity gauge  matches Kalshi UI)
     // open_interest_fp = contracts outstanding (not dollars)
