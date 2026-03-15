@@ -281,6 +281,7 @@ function App() {
       if (cfg.MAX_CONCURRENT    != null) setMaxConcurrent(cfg.MAX_CONCURRENT);
       if (cfg.MIN_LIQUIDITY     != null) setMinLiquidity(cfg.MIN_LIQUIDITY);
       if (cfg.MAX_HOURS_TO_GAME != null) setMaxHoursToGame(cfg.MAX_HOURS_TO_GAME);
+      if (cfg.PAPER_MODE != null) setLiveMode(!cfg.PAPER_MODE);
     }).catch(function() {});
   }, []);
 
@@ -375,7 +376,7 @@ function App() {
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:9,color:liveMode?"#ff4d6d":"#4d9fff",letterSpacing:.5}}>{liveMode?"⚠ LIVE":"PAPER"}</span>
-            <Toggle on={liveMode} onChange={v=>{ if(v) setShowModal(true); else setLiveMode(false); }}/>
+            <Toggle on={liveMode} onChange={v=>{ if(v) setShowModal(true); else setLiveMode(false);api("/api/mode","POST",{mode:"paper"}); }}/>
           </div>
           <button onClick={toggleBot} disabled={inCooldown} style={{background:inCooldown?"rgba(245,166,35,.12)":botOn?"rgba(255,77,109,.12)":"rgba(0,229,160,.12)",border:`1px solid ${inCooldown?"#f5a62344":botOn?"#ff4d6d44":"#00e5a044"}`,color:inCooldown?"#f5a623":botOn?"#ff4d6d":"#00e5a0",borderRadius:6,padding:"6px 18px",cursor:inCooldown?"not-allowed":"pointer",fontSize:9,fontFamily:"inherit",fontWeight:700,letterSpacing:1,display:"flex",alignItems:"center",gap:7,opacity:inCooldown?.7:1}}>
             <span style={{width:5,height:5,borderRadius:"50%",background:inCooldown?"#f5a623":botOn?"#ff4d6d":"#00e5a0",display:"inline-block",animation:inCooldown||botOn?"blink .9s infinite":"none"}}/>
@@ -424,7 +425,7 @@ function App() {
             </div>
             <div style={{display:"flex",gap:10}}>
               <button onClick={()=>setShowModal(false)} style={{flex:1,background:"#111",border:"1px solid #222",color:"#666",borderRadius:7,padding:"10px",cursor:"pointer",fontSize:10,fontFamily:"inherit"}}>Cancel</button>
-              <button onClick={()=>{setLiveMode(true);setShowModal(false);}} style={{flex:1,background:"rgba(255,77,109,.15)",border:"1px solid #ff4d6d",color:"#ff4d6d",borderRadius:7,padding:"10px",cursor:"pointer",fontSize:10,fontFamily:"inherit",fontWeight:700}}>Confirm Live</button>
+              <button onClick={()=>{setLiveMode(true);setShowModal(false);api("/api/mode","POST",{mode:"live"});}} style={{flex:1,background:"rgba(255,77,109,.15)",border:"1px solid #ff4d6d",color:"#ff4d6d",borderRadius:7,padding:"10px",cursor:"pointer",fontSize:10,fontFamily:"inherit",fontWeight:700}}>Confirm Live</button>
             </div>
           </div>
         </div>
