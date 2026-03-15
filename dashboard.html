@@ -163,7 +163,7 @@ function ScanButton() {
     setScanning(true);
     setFlash(null);
     try {
-      const res = await api("/api/scan", "POST");
+      const res = await api("/api/scan", "POST", { sports: getEnabledSports() });
       setFlash(res.ok ? "ok" : "err");
     } catch {
       setFlash("err");
@@ -242,7 +242,7 @@ function App() {
   // ── BOT CONTROLS ──────────────────────────────────────────────────────────────
   const startBot = async () => {
     if (inCooldown) return;
-    await api("/api/start", "POST");
+    await api("/api/start", "POST", { sports: getEnabledSports() });
   };
   const stopBot = async () => {
     await api("/api/stop", "POST");
