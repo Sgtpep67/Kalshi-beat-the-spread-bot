@@ -338,6 +338,16 @@ app.post("/api/cooldown/clear", function(req, res) {
   res.json({ ok: true });
 });
 
+app.post("/api/bet/close", function(req, res) {
+  var gameId = req.body && req.body.gameId;
+  if (!gameId) return res.status(400).json({ error: "gameId required" });
+  var bet = state.openBets.find(function(b) { return b.gameId === gameId; });
+  if (!bet) return res.status(404).json({ error: "Bet not found" });
+  state.openBets = state.openBets.filter(function(b) { return b.gameId !== gameId; });
+  pushLog("[manual] Closed open bet: " + (bet.team || gameId) + " $" + (bet.stake || 0).toFixed(2));
+  res.json({ ok: true, closed: bet });
+});
+
 app.post("/api/result", function(req, res) {
   handleResult(req.body.gameId, req.body.won);
   res.json({ ok: true });
