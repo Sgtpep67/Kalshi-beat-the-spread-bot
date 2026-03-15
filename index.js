@@ -145,7 +145,7 @@ async function scan() {
     var markets = allMarkets.filter(function(m) {
       return !m.sport || state.enabledSports.indexOf(m.sport) > -1;
     });
-    pushLog("[kalshi] " + markets.length + " sports markets fetched (" + state.enabledSports.join(",") + ")");
+    pushLog("[kalshi] " + markets.length + " sports markets fetched (" + state.enabledSports.join(",") + ") | LIQ=$" + CONFIG.MIN_LIQUIDITY + " HOURS=" + CONFIG.MAX_HOURS_TO_GAME);
 
     // Only re-fetch odds if cache is stale (older than 10 minutes)
     var now = Date.now();
