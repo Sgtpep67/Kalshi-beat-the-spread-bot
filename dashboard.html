@@ -318,6 +318,7 @@ function App() {
         setSettledBets(data.settledBets ?? []);
         if (data.inCooldown && data.cooldownAt) setCooldownAt(new Date(data.cooldownAt));
         // Balance comes directly from state now — refreshed after every bet/settlement
+        if (data.tradingHoursOnly != null) setTradingHoursOnly(data.tradingHoursOnly);
         if (data.kalshiBalance !== null && data.kalshiBalance !== undefined) {
           setKalshiBalance(data.kalshiBalance);
         }
@@ -343,6 +344,13 @@ function App() {
   const sPnl = id => BETS.filter(b=>b.sport===id).reduce((s,b)=>s+b.pnl,0);
   const sWR  = id => { const sb=BETS.filter(b=>b.sport===id); return sb.length?Math.round(sb.filter(b=>b.status==="WON").length/sb.length*100):0; };
   const sCum = id => BETS.filter(b=>b.sport===id).reduce((a,b)=>{ a.push((a.at(-1)??0)+b.pnl); return a; },[0]);
+  const [tradingHoursOnly, setTradingHoursOnly] = useState(false);
+
+  const toggleTradingHours = async (val) => {
+    setTradingHoursOnly(val);
+    await api("/api/trading-hours", "POST", { enabled: val });
+  };
+
   const [sportOn, setSportOn] = useState({ nba:true, nfl:true, mlb:true, nhl:true, ncaab:true, ncaaf:false, ncaabb:false, ncaah:false, wnba:false });
   const [eventOn, setEventOn] = useState({ ml:true, spread:false, total:false, props:false });
 
@@ -612,6 +620,28 @@ function App() {
                 <div style={{fontSize:9,color:"#7ac0a0",lineHeight:1.8}}>Before placing any bet the bot checks a game lock registry. If a bet has already been placed on that game today, the signal is rejected. Resets at midnight.</div>
                 <div style={{marginTop:8,fontSize:9,color:"#88c0a0"}}>Locked today: <span style={{color:"#00e5a0"}}>{betLockSet.size}</span> game{betLockSet.size!==1?"s":""}</div>
               </div>
+            </Card>
+
+            {/* TRADING HOURS TOGGLE */}
+            <Card>
+              <SLabel>TRADING HOURS</SLabel>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:10,color:"#ccccdd",marginBottom:3}}>Restrict to 6:00 AM - 11:59 PM MST</div>
+                  <div style={{fontSize:9,color:"#555570"}}>When OFF the bot scans 24 hours a day</div>
+                </div>
+                <Toggle on={tradingHoursOnly} onChange={toggleTradingHours}/>
+              </div>
+              {tradingHoursOnly && (
+                <div style={{fontSize:9,padding:"6px 10px",background:"rgba(245,166,35,.08)",border:"1px solid rgba(245,166,35,.25)",borderRadius:6,color:"#f5a623"}}>
+                  Active window: 6:00 AM to 11:59 PM MST
+                </div>
+              )}
+              {!tradingHoursOnly && (
+                <div style={{fontSize:9,padding:"6px 10px",background:"rgba(85,85,112,.12)",border:"1px solid rgba(85,85,112,.3)",borderRadius:6,color:"#8888aa"}}>
+                  Running 24 hours (no time restriction)
+                </div>
+              )}
             </Card>
 
             {/* APPLY BUTTON */}
