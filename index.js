@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const path    = require("path");
-const { getKalshiMarkets, placeBet, getBalance } = require("./kalshi");
+const { getKalshiMarkets, placeBet, getBalance, getSettlements, getPositions } = require("./kalshi");
 var oddsModule = require("./odds");
 var getSharpOddsMulti = oddsModule.getSharpOddsMulti;
 const { eloToWinProb, getElo } = require("./elo");
@@ -77,6 +77,64 @@ function lockGame(gameId) {
   state.betLockSet.add(getEventKey(gameId) + "-" + today);
   pushLog("[lock] Game locked: " + getEventKey(gameId));
 }
+async function checkSettlements() {
+  if (!CONFIG.KALSHI_API_KEY || !CONFIG.KALSHI_PRIVATE_KEY) return;
+  if (state.openBets.length === 0) return;
+  try {
+    var settlements = await getSettlements(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY, 100);
+    var positions   = await getPositions(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
+
+    // Build a map of settled tickers
+    var settledMap = {};
+    settlements.forEach(function(s) {
+      if (s.ticker) settledMap[s.ticker] = s;
+    });
+
+    // Build a map of current positions (still open on Kalshi)
+    var positionMap = {};
+    positions.forEach(function(p) {
+      if (p.ticker) positionMap[p.ticker] = p;
+    });
+
+    // Check each open bet
+    var toSettle = [];
+    state.openBets.forEach(function(bet) {
+      var settlement = settledMap[bet.gameId];
+      if (settlement) {
+        // Market settled - determine win/loss
+        // settlement.revenue > 0 means we won
+        // settlement.profit_loss in cents
+        var profitCents = settlement.profit_loss || settlement.revenue || 0;
+        var won = profitCents > 0;
+        toSettle.push({ bet: bet, won: won, profitCents: profitCents });
+      } else if (!positionMap[bet.gameId]) {
+        // No longer in positions and not in settlements - check if game is over
+        // If game start was more than 4 hours ago, assume settled
+        var gameStart = bet.closeTime ? new Date(bet.closeTime) : null;
+        var hoursAgo  = gameStart ? (Date.now() - gameStart.getTime()) / 3600000 : 0;
+        if (hoursAgo > 4) {
+          pushLog("[settle] Bet on " + (bet.team||bet.gameId) + " may be settled  not found in positions. Manual check needed.");
+        }
+      }
+    });
+
+    // Process settlements
+    toSettle.forEach(function(item) {
+      var won = item.won;
+      var bet = item.bet;
+      pushLog("[auto-settle] " + (won ? "WON" : "LOST") + " " + (bet.team||bet.gameId) + " profit: " + (item.profitCents/100).toFixed(2));
+      handleResult(bet.gameId, won);
+    });
+
+    if (toSettle.length > 0) {
+      pushLog("[settle] Auto-settled " + toSettle.length + " bet(s)");
+      await refreshBalance();
+    }
+  } catch(err) {
+    pushLog("[settle] Error checking settlements: " + err.message);
+  }
+}
+
 async function refreshBalance() {
   if (!CONFIG.KALSHI_API_KEY || !CONFIG.KALSHI_PRIVATE_KEY) return;
   try {
@@ -129,6 +187,7 @@ async function scan() {
     }
   }
   await refreshBalance();
+  await checkSettlements();
 
   if (state.todayLoss >= CONFIG.DAILY_LOSS_LIMIT) {
     state.running = false;
@@ -385,6 +444,13 @@ app.get("/api/bet/locks", function(req, res) {
   res.json({ ok: true, locks: locks, count: locks.length });
 });
 
+app.post("/api/settle-check", async function(req, res) {
+  var before = state.settledBets.length;
+  await checkSettlements();
+  var settled = state.settledBets.length - before;
+  res.json({ ok: true, settled: settled });
+});
+
 app.post("/api/bet/unlock", function(req, res) {
   var key = req.body && req.body.key;
   if (!key) return res.status(400).json({ error: "key required" });
@@ -633,6 +699,9 @@ app.get("/api/debug/markets", async function(req, res) {
 
 //  START 
 setInterval(scan, 60000);
+setInterval(function() {
+  if (state.openBets.length > 0) checkSettlements().catch(function() {});
+}, 5 * 60 * 1000); // check settlements every 5 minutes
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, function() {
