@@ -272,6 +272,8 @@ function App() {
   const [consecL,    setConsecL]    = useState(1);
   const [openBets,   setOpenBets]   = useState([])
   const [closingBet,  setClosingBet]  = useState(null);
+  const [histSort,    setHistSort]    = useState("date_desc");
+  const [histFilter,  setHistFilter]  = useState("all");
   const [gameLocks,   setGameLocks]   = useState([]);
   const [showLocks,   setShowLocks]   = useState(false);
 
@@ -819,7 +821,7 @@ function App() {
                     </div>
                     <div style={{fontSize:9,color:e.active===false?"#444455":"#9999bb",fontStyle:e.active===false?"italic":"normal"}}>{e.desc}</div>
                   </div>
-                  <Toggle on={!!eventOn[e.id] && e.active!==false} disabled={e.active===false} onChange={v=>setEventOn(p=>({...p,[e.id]:v}))}/>
+                  <Toggle on={!!eventOn[e.id] && e.active!==false} disabled={e.active===false} onChange={function(v){ if(e.id==="ml"&&!v){alert("Warning: Moneyline is required. Disabling it stops all scanning.");} setEventOn(function(p){return Object.assign({},p,{[e.id]:v});});}}/>
                 </div>
               ))}
             </Card>
@@ -881,12 +883,33 @@ function App() {
                 <span>#</span><span>MATCHUP</span><span>SPORT</span><span>STAKE</span><span>EDGE</span><span>STATUS</span><span>P&amp;L</span>
               </div>
               <div style={{maxHeight:480,overflowY:"auto"}}>
+                <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{fontSize:9,color:"#555570"}}>SORT:</span>
+                  {[["date_desc","Newest"],["date_asc","Oldest"],["pnl_desc","Best P&L"],["pnl_asc","Worst P&L"]].map(function(o){
+                    return <button key={o[0]} onClick={function(){setHistSort(o[0]);}} style={{fontSize:8,padding:"3px 8px",background:histSort===o[0]?"rgba(0,229,160,.15)":"rgba(255,255,255,.04)",border:"1px solid "+(histSort===o[0]?"#00e5a044":"#222230"),color:histSort===o[0]?"#00e5a0":"#777788",borderRadius:4,cursor:"pointer",fontFamily:"inherit"}}>{o[1]}</button>;
+                  })}
+                  <span style={{fontSize:9,color:"#555570",marginLeft:8}}>FILTER:</span>
+                  {[["all","All"],["won","Won"],["lost","Lost"]].map(function(o){
+                    return <button key={o[0]} onClick={function(){setHistFilter(o[0]);}} style={{fontSize:8,padding:"3px 8px",background:histFilter===o[0]?"rgba(77,159,255,.15)":"rgba(255,255,255,.04)",border:"1px solid "+(histFilter===o[0]?"#4d9fff44":"#222230"),color:histFilter===o[0]?"#4d9fff":"#777788",borderRadius:4,cursor:"pointer",fontFamily:"inherit"}}>{o[1]}</button>;
+                  })}
+                  <span style={{fontSize:9,color:"#555570",marginLeft:"auto"}}>{BETS.length} bets</span>
+                </div>
                 {BETS.length === 0 && (
                   <div style={{padding:"40px 0",textAlign:"center",color:"#555570",fontSize:10}}>
                     No settled bets yet — history will appear here after the bot places and resolves real trades
                   </div>
                 )}
-                {BETS.map((b,i)=>(
+                {(function(){
+                  var filtered = BETS.filter(function(b){ return histFilter==="all"||(histFilter==="won"&&b.status==="WON")||(histFilter==="lost"&&b.status==="LOST"); });
+                  var sorted = filtered.slice().sort(function(a,b){
+                    if(histSort==="date_desc") return (b.id||0)-(a.id||0);
+                    if(histSort==="date_asc")  return (a.id||0)-(b.id||0);
+                    if(histSort==="pnl_desc")  return (b.pnl||0)-(a.pnl||0);
+                    if(histSort==="pnl_asc")   return (a.pnl||0)-(b.pnl||0);
+                    return 0;
+                  });
+                  return sorted;
+                })().map((b,i)=>(
                   <div key={b.id} className="tr" style={{display:"grid",gridTemplateColumns:"32px 1fr 58px 80px 58px 72px 80px",padding:"9px 16px",borderBottom:"1px solid #0d0d12",background:i%2?"#0a0a0e":"transparent",fontSize:11,alignItems:"center"}}>
                     <span style={{fontSize:9,color:"#555570"}}>{b.id}</span>
                     <div><div style={{color:"#fff"}}>{b.team}</div><div style={{fontSize:9,color:"#9999bb"}}>vs {b.opp}</div></div>
