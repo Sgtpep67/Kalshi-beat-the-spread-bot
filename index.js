@@ -15,18 +15,18 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 //  CONFIG 
 const CONFIG = {
   PAPER_MODE:        process.env.PAPER_MODE !== "false",
-  MIN_EDGE_PCT:      parseFloat(process.env.MIN_EDGE_PCT      || "5"),
-  MAX_BET_USD:       parseFloat(process.env.MAX_BET_USD       || "5"),
-  DAILY_LOSS_LIMIT:  parseFloat(process.env.DAILY_LOSS_LIMIT  || "50"),
-  MAX_CONSEC_LOSSES: parseInt(  process.env.MAX_CONSEC_LOSSES || "4"),
-  MAX_CONCURRENT:    parseInt(  process.env.MAX_CONCURRENT    || "3"),
-  MIN_LIQUIDITY:     parseFloat(process.env.MIN_LIQUIDITY     || "25"),
-  MAX_HOURS_TO_GAME: parseFloat(process.env.MAX_HOURS_TO_GAME || "4"),
-  KELLY_FRACTION:    parseFloat(process.env.KELLY_FRACTION    || "0.25"),
-  ELO_WEIGHT:        parseFloat(process.env.ELO_WEIGHT        || "0.40"),
   KALSHI_API_KEY:    process.env.KALSHI_API_KEY,
   KALSHI_PRIVATE_KEY:(process.env.KALSHI_API_SECRET || "").replace(/\\n/g, "\n"),
   ODDS_API_KEY:      process.env.ODDS_API_KEY,
+  MIN_EDGE_PCT:      5,
+  MAX_BET_USD:       5,
+  DAILY_LOSS_LIMIT:  50,
+  MAX_CONSEC_LOSSES: 4,
+  MAX_CONCURRENT:    3,
+  MIN_LIQUIDITY:     50,
+  MAX_HOURS_TO_GAME: 24,
+  KELLY_FRACTION:    0.25,
+  ELO_WEIGHT:        0.40,
 };
 
 //  STATE 
@@ -277,8 +277,10 @@ async function scan() {
         if (loggedLiq < 3) { pushLog("SKIP liq: " + (homeTeam||gameId) + " vol24h=$" + liqValue.toFixed(0) + " < $" + CONFIG.MIN_LIQUIDITY); loggedLiq++; }
         continue;
       }
+      // Hard safety cap: never bet more than 7 days (168h) out regardless of settings
+      var effectiveMaxHours = Math.min(CONFIG.MAX_HOURS_TO_GAME, 168);
       // Skip if game is too far in future OR more than 4h in the past
-      if (hoursUntilGame > CONFIG.MAX_HOURS_TO_GAME || hoursUntilGame < -4) {
+      if (hoursUntilGame > effectiveMaxHours || hoursUntilGame < -4) {
         skipHours++;
         if (loggedHours < 3) { var st = market.gameStartTime ? new Date(market.gameStartTime).toLocaleString() : hoursUntilGame.toFixed(1)+"h"; pushLog("SKIP hours: " + (homeTeam||gameId) + " starts: " + st + " (" + hoursUntilGame.toFixed(1) + "h away)"); loggedHours++; }
         continue;
@@ -715,5 +717,7 @@ setInterval(function() {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, function() {
   console.log("KalshiBot running on port " + PORT);
+  console.log("CONFIG: MAX_BET=$" + CONFIG.MAX_BET_USD + " LIQ=$" + CONFIG.MIN_LIQUIDITY + " HOURS=" + CONFIG.MAX_HOURS_TO_GAME + " EDGE=" + CONFIG.MIN_EDGE_PCT + "% PAPER=" + CONFIG.PAPER_MODE);
+
   refreshBalance().catch(function() {});
 });
