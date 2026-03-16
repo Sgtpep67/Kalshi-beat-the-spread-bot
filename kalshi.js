@@ -272,4 +272,34 @@ async function getBalance(apiKeyId, privateKey) {
   }
 }
 
-module.exports = { getKalshiMarkets, placeBet, getBalance };
+async function getSettlements(apiKeyId, privateKey, limit) {
+  var endpoint = "/portfolio/settlements";
+  try {
+    var resp = await axios.get(BASE_URL + endpoint, {
+      headers: makeHeaders("GET", endpoint, apiKeyId, privateKey),
+      params:  { limit: limit || 50 },
+      timeout: 10000,
+    });
+    return resp.data.settlements || [];
+  } catch(err) {
+    console.log("[kalshi] getSettlements error: " + err.message);
+    return [];
+  }
+}
+
+async function getPositions(apiKeyId, privateKey) {
+  var endpoint = "/portfolio/positions";
+  try {
+    var resp = await axios.get(BASE_URL + endpoint, {
+      headers: makeHeaders("GET", endpoint, apiKeyId, privateKey),
+      params:  { limit: 100 },
+      timeout: 10000,
+    });
+    return resp.data.market_positions || [];
+  } catch(err) {
+    console.log("[kalshi] getPositions error: " + err.message);
+    return [];
+  }
+}
+
+module.exports = { getKalshiMarkets, placeBet, getBalance, getSettlements, getPositions };
