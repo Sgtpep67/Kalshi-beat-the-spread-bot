@@ -80,6 +80,7 @@ function lockGame(gameId) {
 async function checkSettlements() {
   if (!CONFIG.KALSHI_API_KEY || !CONFIG.KALSHI_PRIVATE_KEY) return;
   if (state.openBets.length === 0) return;
+  if (CONFIG.PAPER_MODE) return; // paper bets have no Kalshi settlements
   try {
     var settlements = await getSettlements(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY, 100);
     var positions   = await getPositions(CONFIG.KALSHI_API_KEY, CONFIG.KALSHI_PRIVATE_KEY);
@@ -143,7 +144,10 @@ async function refreshBalance() {
       state.kalshiBalance   = bal.balance;
       state.portfolioValue  = bal.portfolio_value;
       state.balanceUpdatedAt = new Date().toISOString();
-      pushLog("[balance] $" + bal.balance.toFixed(2) + " available");
+      // Only log balance every 5th call to reduce noise
+  if (!refreshBalance._count) refreshBalance._count = 0;
+  refreshBalance._count++;
+  if (refreshBalance._count % 5 === 1) pushLog("[balance] $" + bal.balance.toFixed(2) + " available");
     }
   } catch (err) {
     pushLog("[balance] fetch failed: " + err.message);
@@ -216,8 +220,10 @@ async function scan() {
       var validSports  = activeSports.filter(function(s) { return ["nba","nfl","mlb","nhl","ncaab","ncaaf","ncaabb","ncaah","wnba"].indexOf(s) > -1; });
       if (validSports.length > 0) {
         oddsCache.data      = await getSharpOddsMulti(CONFIG.ODDS_API_KEY, validSports);
-        oddsCache.fetchedAt = Date.now();
-        pushLog("[odds] Cache refreshed for: " + validSports.join(", "));
+        var oddsGames       = Object.keys(oddsCache.data).length;
+        // Only cache if we got results - retry sooner if empty
+        oddsCache.fetchedAt = oddsGames > 0 ? Date.now() : (Date.now() - ODDS_CACHE_TTL + 60000);
+        pushLog("[odds] Cache refreshed for: " + validSports.join(", ") + " (" + oddsGames + " games)");
       }
     } else {
       pushLog("[odds] Using cached odds (" + Math.round((now - oddsCache.fetchedAt)/60000) + "m old)");
@@ -300,6 +306,10 @@ async function scan() {
 
       lockGame(gameId);
       await refreshBalance();
+      // Prevent duplicate: check if this event is already open
+      var eventKeyCheck = getEventKey(gameId);
+      var alreadyOpen = state.openBets.some(function(ob) { return getEventKey(ob.gameId) === eventKeyCheck; });
+      if (alreadyOpen) { pushLog("SKIP duplicate open bet: " + homeTeam); continue; }
       state.openBets.push({ gameId, team: homeTeam, awayTeam, sport: market.sport || "unknown", stake, edge, fairProb: fairHome, marketProb: kalshiHomeProb, closeTime: market.gameStartTime || market.closeTime || null, volume24h: market.volume24h || 0, openInterest: market.openInterest || 0 });
     }
     pushLog("[scan] Skipped: " + skipLiquidity + " low-liq, " + skipHours + " far-out, " + skipLocked + " locked, " + skipEdge + " low-edge. Signals: " + signalCount);
@@ -396,14 +406,14 @@ app.post("/api/mode", function(req, res) {
 
 app.post("/api/config", function(req, res) {
   var b = req.body || {};
-  if (b.MIN_EDGE_PCT      != null) CONFIG.MIN_EDGE_PCT      = parseFloat(b.MIN_EDGE_PCT);
-  if (b.MAX_BET_USD       != null) CONFIG.MAX_BET_USD       = parseFloat(b.MAX_BET_USD);
-  if (b.DAILY_LOSS_LIMIT  != null) CONFIG.DAILY_LOSS_LIMIT  = parseFloat(b.DAILY_LOSS_LIMIT);
-  if (b.MAX_CONSEC_LOSSES != null) CONFIG.MAX_CONSEC_LOSSES = parseInt(b.MAX_CONSEC_LOSSES);
-  if (b.MAX_CONCURRENT    != null) CONFIG.MAX_CONCURRENT    = parseInt(b.MAX_CONCURRENT);
-  if (b.MIN_LIQUIDITY     != null) CONFIG.MIN_LIQUIDITY     = parseFloat(b.MIN_LIQUIDITY);
-  if (b.MAX_HOURS_TO_GAME != null) CONFIG.MAX_HOURS_TO_GAME = parseFloat(b.MAX_HOURS_TO_GAME);
-  if (b.KELLY_FRACTION    != null) CONFIG.KELLY_FRACTION    = parseFloat(b.KELLY_FRACTION);
+  if (b.MIN_EDGE_PCT      !== undefined) CONFIG.MIN_EDGE_PCT      = parseFloat(b.MIN_EDGE_PCT);
+  if (b.MAX_BET_USD       !== undefined) CONFIG.MAX_BET_USD       = parseFloat(b.MAX_BET_USD);
+  if (b.DAILY_LOSS_LIMIT  !== undefined) CONFIG.DAILY_LOSS_LIMIT  = parseFloat(b.DAILY_LOSS_LIMIT);
+  if (b.MAX_CONSEC_LOSSES !== undefined) CONFIG.MAX_CONSEC_LOSSES = parseInt(b.MAX_CONSEC_LOSSES);
+  if (b.MAX_CONCURRENT    !== undefined) CONFIG.MAX_CONCURRENT    = parseInt(b.MAX_CONCURRENT);
+  if (b.MIN_LIQUIDITY     !== undefined) CONFIG.MIN_LIQUIDITY     = parseFloat(b.MIN_LIQUIDITY);
+  if (b.MAX_HOURS_TO_GAME !== undefined) CONFIG.MAX_HOURS_TO_GAME = parseFloat(b.MAX_HOURS_TO_GAME);
+  if (b.KELLY_FRACTION    !== undefined) CONFIG.KELLY_FRACTION    = parseFloat(b.KELLY_FRACTION);
   pushLog("Config updated: MAX_BET=$" + CONFIG.MAX_BET_USD + " EDGE=" + CONFIG.MIN_EDGE_PCT + "% KELLY=" + Math.round(CONFIG.KELLY_FRACTION*100) + "% CONCURRENT=" + CONFIG.MAX_CONCURRENT + " LIQ=$" + CONFIG.MIN_LIQUIDITY + " HOURS=" + CONFIG.MAX_HOURS_TO_GAME + " CONSEC=" + CONFIG.MAX_CONSEC_LOSSES);
   res.json({ ok: true, config: CONFIG });
 });
