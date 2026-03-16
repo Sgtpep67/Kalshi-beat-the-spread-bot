@@ -578,6 +578,14 @@ function App() {
               <div style={{display:"grid",gridTemplateColumns:"1fr 60px 60px 60px 70px 70px 80px 32px",gap:8,padding:"0 0 6px",borderBottom:"1px solid #141420",fontSize:8,color:"#8888aa",letterSpacing:1}}>
                 <span>MATCHUP</span><span>SPORT</span><span>STAKE</span><span>EDGE</span><span>FAIR</span><span>MKT</span><span>LIQUIDITY</span>
               </div>
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+                <button onClick={async function(){
+                  var r = await api("/api/settle-check","POST");
+                  if(r && r.settled > 0) pushLog("[manual] Settled " + r.settled + " bet(s)");
+                }} style={{fontSize:9,padding:"4px 12px",background:"rgba(0,229,160,.08)",border:"1px solid rgba(0,229,160,.2)",color:"#00e5a0",borderRadius:4,cursor:"pointer",fontFamily:"inherit"}}>
+                  CHECK SETTLEMENTS
+                </button>
+              </div>
               {OPEN_BETS_DEMO.length === 0 && (
                 <div style={{padding:"24px 0",textAlign:"center",color:"#555570",fontSize:10}}>
                   No open bets — start the bot and run a scan to find signals
