@@ -643,6 +643,22 @@ function App() {
                 <div style={{background:"rgba(245,166,35,.07)",border:"1px solid rgba(245,166,35,.2)",borderRadius:6,padding:"10px 12px",fontSize:10,color:"#d4a830",lineHeight:1.8}}>
                   When the consecutive loss limit is hit, the bot <strong style={{color:"#f5a623"}}>stops permanently</strong>. An operator must press <strong style={{color:"#00e5a0"}}>Clear &amp; Restart</strong> to resume.
                 </div>
+                {inCooldown && (
+                  <div style={{marginTop:12,padding:"10px 12px",background:"rgba(245,166,35,.12)",border:"1px solid rgba(245,166,35,.4)",borderRadius:6}}>
+                    <div style={{fontSize:10,color:"#f5a623",fontWeight:700,marginBottom:8}}>BOT IS IN COOLDOWN</div>
+                    <div style={{fontSize:9,color:"#d4a830",marginBottom:10}}>
+                      {consecL} consecutive loss{consecL!==1?"es":""} triggered cooldown. Clear losses and restart to resume trading.
+                    </div>
+                    <button onClick={async function(){
+                      await api("/api/cooldown/clear","POST");
+                    }} style={{width:"100%",padding:"8px",background:"rgba(0,229,160,.15)",border:"1px solid #00e5a0",color:"#00e5a0",borderRadius:6,cursor:"pointer",fontSize:10,fontWeight:700,fontFamily:"inherit",letterSpacing:.5}}>
+                      CLEAR &amp; RESTART BOT
+                    </button>
+                  </div>
+                )}
+                {!inCooldown && (
+                  <div style={{marginTop:10,fontSize:9,color:"#444455",fontStyle:"italic"}}>Bot is not in cooldown</div>
+                )}
               </div>
               <div style={{padding:"11px 13px",background:"rgba(255,77,109,.06)",border:"1px solid rgba(255,77,109,.15)",borderRadius:7}}>
                 <div style={{fontSize:8,color:"#ff4d6d",letterSpacing:1,marginBottom:8}}>LIVE RISK STATE</div>
