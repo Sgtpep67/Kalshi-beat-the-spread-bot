@@ -112,11 +112,25 @@ function parseMarket(m, seriesTicker) {
     // accept open, active, or any tradeable status
     var price = parsePrice(m);
     if (price == null || price <= 0 || price >= 1) return null;
-    // Parse game date from ticker (more accurate than close_time which Kalshi sets to month-end)
+    // Parse game date from ticker - REQUIRED, reject if unparseable
+    // Ticker format: KXNBAGAME-26MAR16LALHOU-LAL -> 26MAR16 = March 16 2026
     var tickerDate = parseGameDateFromTicker(m.ticker || "");
-    var gameTime   = tickerDate ? tickerDate : (m.close_time ? new Date(m.close_time) : null);
-    var hoursUntilGame = gameTime ? (gameTime - Date.now()) / 3600000 : 999;
-    // Allow games from up to 4 hours ago (catches in-progress games) to 999 hours future
+    if (!tickerDate) {
+      // Fall back to close_time only if it looks like a game date (within 30 days)
+      if (m.close_time) {
+        var ct = new Date(m.close_time);
+        var ctHours = (ct - Date.now()) / 3600000;
+        if (ctHours > 0 && ctHours < 168) { // within 7 days only
+          tickerDate = ct;
+        }
+      }
+    }
+    // Reject markets with no parseable game date
+    if (!tickerDate) return null;
+    var hoursUntilGame = (tickerDate - Date.now()) / 3600000;
+    // Reject games more than 7 days out (168h) as a hard safety cap
+    if (hoursUntilGame > 168) return null;
+    // Reject games more than 4 hours in the past
     if (hoursUntilGame < -4) return null;
     var teams = extractTeams(m.title || "");
     // volume_24h_fp = 24h dollar volume (best liquidity gauge  matches Kalshi UI)
