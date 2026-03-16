@@ -263,26 +263,40 @@ async function scan() {
       return;
     }
 
+    var effectiveMaxHours = Math.min(CONFIG.MAX_HOURS_TO_GAME, 168);
+    pushLog("[scan] Filters: LIQ=$" + CONFIG.MIN_LIQUIDITY + " HOURS=" + CONFIG.MAX_HOURS_TO_GAME + "h EDGE=" + CONFIG.MIN_EDGE_PCT + "%");
+
     var skipLiquidity = 0, skipHours = 0, skipLocked = 0, skipEdge = 0, signalCount = 0;
     var loggedLiq = 0, loggedHours = 0;
 
     for (const market of markets) {
-      const { gameId, homeTeam, awayTeam, kalshiProb: kalshiHomeProb, openInterest, volume24h, hoursUntilGame } = market;
-      if (!homeTeam) continue; // skip markets with unparseable team names
+      const gameId          = market.gameId;
+      const homeTeam        = market.homeTeam;
+      const awayTeam        = market.awayTeam;
+      const kalshiHomeProb  = market.kalshiProb;
+      // Always read hoursUntilGame from market object directly
+      // (odds enrichment may have updated it after initial parse)
+      const hoursUntilGame  = market.hoursUntilGame;
 
-      // Use 24h dollar volume as liquidity filter
+      if (!homeTeam) continue;
+
+      // Liquidity filter: 24h dollar volume
       var liqValue = market.volume24h > 0 ? market.volume24h : market.openInterest;
       if (liqValue < CONFIG.MIN_LIQUIDITY) {
         skipLiquidity++;
-        if (loggedLiq < 3) { pushLog("SKIP liq: " + (homeTeam||gameId) + " vol24h=$" + liqValue.toFixed(0) + " < $" + CONFIG.MIN_LIQUIDITY); loggedLiq++; }
+        if (loggedLiq < 3) { pushLog("SKIP liq: " + homeTeam + " vol=$" + liqValue.toFixed(0) + " < $" + CONFIG.MIN_LIQUIDITY); loggedLiq++; }
         continue;
       }
-      // Hard safety cap: never bet more than 7 days (168h) out regardless of settings
-      var effectiveMaxHours = Math.min(CONFIG.MAX_HOURS_TO_GAME, 168);
-      // Skip if game is too far in future OR more than 4h in the past
+      // Hours filter: skip games outside the window
       if (hoursUntilGame > effectiveMaxHours || hoursUntilGame < -4) {
         skipHours++;
-        if (loggedHours < 3) { var st = market.gameStartTime ? new Date(market.gameStartTime).toLocaleString() : hoursUntilGame.toFixed(1)+"h"; pushLog("SKIP hours: " + (homeTeam||gameId) + " starts: " + st + " (" + hoursUntilGame.toFixed(1) + "h away)"); loggedHours++; }
+        if (loggedHours < 3) {
+          var st = market.gameStartTime
+            ? new Date(market.gameStartTime).toLocaleString("en-US", {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})
+            : hoursUntilGame.toFixed(1) + "h";
+          pushLog("SKIP hours: " + homeTeam + " starts " + st + " (" + hoursUntilGame.toFixed(1) + "h) > " + effectiveMaxHours + "h limit");
+        }
+        loggedHours++;
         continue;
       }
       if (isGameLocked(gameId)) { skipLocked++; continue; }
